@@ -13,6 +13,8 @@ src/parser.cpp: misc/parser.y misc/lexer.l | build #ADD incl path
 build:
 	mkdir -p build
 
+assemble: src/lexer.cpp src/parser.cpp
+	g++ src/lexer.cpp src/parser.cpp src/Assembler.cpp  $(CFLAGS) -o build/assemble
 
 CFLAGS= -std=c++11 -Wall -Wextra -o3
 

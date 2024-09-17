@@ -8,6 +8,7 @@
 %}
 
 %x COMMENT
+%x ENDING
 
 %option outfile="lexer.cpp" header-file="lexer.hpp"
 %option yylineno
@@ -23,20 +24,6 @@ BIN 	(-?0[bB][01]+)
 	
 
 
-
-/*
-[0-9]+\.[0-9]+ { yylval.fval = atof(yytext); return FLOAT; }
-[0-9]+         { yylval.ival = atoi(yytext); return INT; }
-[a-zA-Z0-9]+   {
-  yylval.sval = strdup(yytext);
-  return STRING;
-}
-*/
-
-
-
-
-
 %%
 
 [ \t]          ;
@@ -47,7 +34,7 @@ BIN 	(-?0[bB][01]+)
 \.section		{ return SECTION; }
 \.word			{ return WORD; }
 \.skip 			{ return SKIP; }
-\.end			{ return END; }
+\.end			{ BEGIN(ENDING); return END; }
 
 
 halt		{ return HALT; }
@@ -61,33 +48,67 @@ bne			{ return BNE; }
 bgt			{ return BGT; }
 push 		{ return PUSH; }
 pop 		{ return POP; }
-xchg|add|sub|mul|div|and|or|xor|shl|shr {return OPERATION;}
+xchg|add|sub|mul|div|and|or|xor|shl|shr {
+				yylval.ident = new std::string(yytext);
+				return OPERATION;
+			}
 not			{return NOT;}
 ld			{ return LD;}
 st 			{return ST;}
 csrrd		{return CSRRD;}
 csrwr		{return CSRWR;}
 
-"%"{GPR}	{ // TODO obradi br registra
-			yylval.ident = strdup(yytext); // FIX: MEMORY LEAK
+"%"{GPR}	{ 
+			switch(yytext[1]){
+				case 'r':{
+					yylval.gprType = (GPRType)strtol(yytext+2,NULL,0);
+					break;
+				}
+				case 'p':{
+					yylval.gprType = GPRType::PC;
+					break;
+				}
+				case 's':{
+					yylval.gprType=GPRType::SP;
+				}
+			}
 			return GPR;
 			}
-"%"{CSR}	{ // TODO obradi br registra
-			yylval.ident = strdup(yytext); // FIX: MEMORY LEAK
-			return CSR;
+"%"{CSR}	{ 
+				switch(yytext[1]){
+					case 's':{
+						yylval.csrType = CSRType::STATUS;
+						break;
+					}
+					case 'h':{
+						yylval.csrType = CSRType::HANDLER;
+						break;
+					}
+					case 'c':{
+						yylval.csrType= CSRType::CAUSE;
+					}
+				}
+				return CSR;
 			}
 {IDENT}:	{ 
-			yylval.ident = strdup(yytext); // FIX: MEMORY LEAK
+			yylval.ident = new std::string(yytext);//strdup(yytext); // FIX: MEMORY LEAK
+			yylval.ident->pop_back();
 			return LABEL;
 			}
 {IDENT}		{ 
-			yylval.ident = strdup(yytext); // FIX: MEMORY LEAK
+			yylval.ident = new std::string(yytext);
+			//strdup(yytext); // FIX: MEMORY LEAK
 			return IDENT;
 			}
-{DEC}|{BIN}|{HEX}		{
-						yylval.num = strtol(yytext,NULL,0); 
-						return NUM;
-						}		
+{DEC}|{HEX}		{
+					yylval.num = strtol(yytext,NULL,0); 
+					return NUM;
+				}	
+
+{BIN}			{
+					yylval.num = strtol(yytext+2,NULL,2);
+					return NUM;
+				}	
 ,	{ return COMMA; }	
 "["	{return LBRACKET;}
 "]" {return RBRACKET;}
@@ -96,7 +117,8 @@ csrwr		{return CSRWR;}
 
 
 
-
+<ENDING>.		;
+<ENDING>\n		;
 #			   { BEGIN(COMMENT); }
 <COMMENT>\n	   { BEGIN(INITIAL); ++line_num; return ENDL; }
 <COMMENT>.		;
