@@ -23,7 +23,7 @@ enum class GPRType {
 };
 
 enum class CSRType {
-	STATUS, HANDLER, CAUSE, INVALID
+	STATUS=0, HANDLER=1, CAUSE=2, INVALID
 };
 
 
@@ -136,6 +136,7 @@ struct Line{
 		INSTRUCTION, DIRECTIVE, INVALID
 	};
 	LineType type;
+	uint32_t lineNumber;
 	union{
 		Instruction* instruction;
 		Directive* directive;

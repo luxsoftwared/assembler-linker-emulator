@@ -80,9 +80,12 @@ struct SymbolTableElem{
 
 struct RelocTableElem{
 	enum RelocType{
-		ABSOLUTE, PCRELATIVE
-	};
-	uint32_t offset;//LC
+		VALUE,
+		JMP, // in instr: pc rel to addres or from lit pool
+		DATA_OP // in inst: pc rel to data operand
+			};
+	uint32_t offset;// LC, or where elem should be put (relastive to section start)
+	
 	std::string* sectionName;
 	RelocType type;
 	std::string* symbolName;
@@ -122,12 +125,14 @@ struct Section{
 	uint32_t endAddress;
 	uint32_t locationCounter;
 	std::vector<uint8_t> code;
-	//std::vector<uint32_t> relocationTable;
-	std::vector<SymbolTableElem> symbolTable;
+	std::vector<uint32_t> relocationTable;
+	std::map<std::string, SymbolTableElem> symbolTable;
+	//std::map<std::string, uint32_t> symTabNameToId;
+	std::vector<LitPoolElem> litPool;
 
-	void addSymbol(SymbolTableElem sym){
+	/*void addSymbol(SymbolTableElem sym){
 		symbolTable.push_back(sym);
-	}
+	}*/
 
 	void printSection(){
 		std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<id;
@@ -162,6 +167,19 @@ struct Section{
 
 };
 
+struct LitPoolElem{ // addressed pc rel from instruction
+	uint32_t value;
+	uint32_t addressOfInstruction;
+	//bool resolved=true; // if false, when elem is placed in code, add it to relocation table
+	// is type always absolute?
+};
+
+struct LitPool{
+	std::vector<LitPoolElem> pool;
+	uint32_t startAddress = 0;
+};
+
+
 
 
 
@@ -183,14 +201,20 @@ public:
 	void printDebug();
 private:
 	uint32_t LC;
-	std::vector<SymbolTableElem> symbolTable;
-	std::map<std::string, uint32_t> symTabNameToId;
+	uint32_t inputFileLineNum;
+	std::map<std::string, SymbolTableElem> symbolTable;
+	//std::map<std::string, uint32_t> symTabNameToId;
 	std::vector<RelocTableElem> relocationTable;
 	std::map<std::string, Section> sections;
 	Section* currentSection;
-	std::vector<uint8_t> code;
+	//std::vector<uint8_t> code;
 
 	void push32bitsToCode(uint32_t word);
+
+	void processJMPoperand(Operand op);
+	void processCallInstruction(Instruction* instr);
+	void endSection();
+	void endFile();
 
 };
 
@@ -198,8 +222,24 @@ private:
 enum class InstructionCode{
 	HALT=0x00,
 	INT=0x10,
-	IRET, CALL, RET, JMP, BEQ, BNE, BGT, PUSH, POP, XCHG,
-	ADD, SUB, MUL, DIV, NOT, AND, OR, XOR, SHL, SHR, LD, ST,CSRRD,CSRWR, INVALID
+	IRET=0x97,
+	CALL_L=0x21, //* lit
+	RET, //*
+	JMP, BEQ, BNE, BGT,
+	PUSH=0x81,
+	POP=0x93,
+	XCHG=0x40,
+	ADD=0x50,
+	SUB=0x51,
+	MUL=0x52,
+	DIV=0x53,
+	NOT=0x60,
+	AND=0x61,
+	OR=0x62,
+	XOR=0x63,
+	SHL=0x70,
+	SHR=0x71,
+	LD, ST,CSRRD,CSRWR, INVALID
 }
 
 

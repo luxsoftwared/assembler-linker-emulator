@@ -70,7 +70,7 @@
 %%
 
 program: program line[l]
-		{	
+		{	$l->lineNumber=@$.last_line;
 			Line::printLine($l);
 			assembler->processLine($l);
 			
