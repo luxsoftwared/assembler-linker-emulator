@@ -1,17 +1,25 @@
 # fajl 
 
-.global glSimbol1, glS2
-
-.section imeSekcije
-.skip 10
+.global glS1, glS2, glSNDF
+.extern extS1
+.section prvaSekcija
+.skip 4
 glS2:
-nemejn:
-.word simbol, 0xF
-#jmp 123
-#beq %r1, %pc, main
+lokalS1:
+.word 0xF, extS1 #OK 
+jmp 4
+jmp glS2 #OK
+beq %r1, %pc, lokalS1 #OK
+jmp nedefP
 #st %r1, [%pc + 10]
 .section drugaSekcija
 .word 0b11
-promDrugeSK:.word 0xFFFFFFFF
-#add %pc,%r1
+.word 0xFFFF,promDrugeSK
+promDrugeSK: jmp 0xFFFF 	#ok
+jmp glS1 	#ok
+add %r0,%r1
+glS1:
+.word 0x5555
+csrrd %cause, %r3
+ld [%r2+glS2],%r3 
 .end
