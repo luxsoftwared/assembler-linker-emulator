@@ -40,7 +40,11 @@ struct SymOrLit{
 
 struct DataOperand{
 	enum DataOperandType{
-		LIT, SYM, IMM_LIT, IMM_SYM, GPR, REL_GPR, REL_GPR_LIT, REL_GPR_SYM //Tip adresiranja
+		LIT,// $lit 
+		SYM , // $sym
+		IMM_LIT, // lit 
+		IMM_SYM,// sym
+		GPR, REL_GPR, REL_GPR_LIT, REL_GPR_SYM 
 	};
 	DataOperandType type;
 	GPRType gpr;
