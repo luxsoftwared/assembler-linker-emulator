@@ -14,7 +14,7 @@ build:
 	mkdir -p build
 
 assemble: src/lexer.cpp src/parser.cpp
-	g++ src/lexer.cpp src/parser.cpp src/Assembler.cpp  $(CFLAGS) -o build/assemble
+	g++ src/lexer.cpp src/parser.cpp src/Assembler.cpp  $(CFLAGS) -o build/asembler
 
 CFLAGS= -std=c++11 -Wall -Wextra -o3
 

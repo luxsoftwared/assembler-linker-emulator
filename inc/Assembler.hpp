@@ -5,6 +5,7 @@
 #include "parsingTypes.hpp"
 #include <iomanip>
 #include <vector>
+#include <fstream>
 
 using std::uint32_t;
 
@@ -26,54 +27,54 @@ struct SymbolTableElem{
 		uint32_t size;
 	};
 
-	void printSymbolTableElem(){
-		std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<id;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(15)<<std::left<<*symbolName;
-		std::cout<<std::setw(1)<<"|";
+	void printSymbolTableElem(std::ostream& out = std::cout){
+		out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<id;
+		out<<std::setw(1)<<"|";
+		out<<std::setw(15)<<std::left<<*symbolName;
+		out<<std::setw(1)<<"|";
 		switch(type){
 			case SymbolType::LOCAL:{
-				std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"LOCAL";
+				out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"LOCAL";
 				break;
 			}
 			case SymbolType::GLOBAL:{
-				std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"GLOBAL";
+				out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"GLOBAL";
 				break;
 			}
 			case SymbolType::EXTERN:{
-				std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"EXTERN";
+				out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"EXTERN";
 				break;
 			}
 			case SymbolType::SECTION:{
-				std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"SECTION";
+				out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"SECTION";
 				break;
 			}
 		}
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<value<<"";
-		std::cout<<std::setw(1)<<"|";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<value<<"";
+		out<<std::setw(1)<<"|";
 		if(type==SymbolType::SECTION){
-			std::cout<<std::setw(18)<<std::left<<size<<"";
+			out<<std::setw(18)<<std::left<<size<<"";
 		}
 		else{
-			std::cout<<std::setw(18)<<std::left<<(sectionName!=NULL?(*sectionName):"0");
+			out<<std::setw(18)<<std::left<<(sectionName!=NULL?(*sectionName):"0");
 		}
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<"\n";
+		out<<std::setw(1)<<"|";
+		out<<"\n";
 	}
-	static void printSymbolTableHeader(){
-		std::cout<<std::setw(10)<<std::left<<"ID";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(15)<<std::left<<"Symbol name";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(10)<<std::left<<"Type";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(10)<<std::left<<"Value";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(18)<<std::left<<"Size/Section name";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<"\n";
-		std::cout<<"-------------------------------------------------------------------\n";
+	static void printSymbolTableHeader(std::ostream& out = std::cout){
+		out<<std::setw(10)<<std::left<<"ID";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(15)<<std::left<<"Symbol name";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(10)<<std::left<<"Type";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(10)<<std::left<<"Value";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(18)<<std::left<<"Size/Section name";
+		out<<std::setw(1)<<"|";
+		out<<"\n";
+		out<<"-------------------------------------------------------------------\n";
 
 	}
 };
@@ -92,42 +93,42 @@ struct RelocTableElem{
 	RelocType type;
 	std::string* symbolName;
 
-	static void printRelocTableHeader(){
-		std::cout<<std::setw(15)<<std::left<<"Symbol name";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(10)<<std::left<<"Offset";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(10)<<std::left<<"Type";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(15)<<std::left<<"Section name";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<"\n";
-		std::cout<<"-----------------------------------------------------\n";
+	static void printRelocTableHeader(std::ostream& out = std::cout){
+		out<<std::setw(15)<<std::left<<"Symbol name";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(10)<<std::left<<"Offset";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(10)<<std::left<<"Type";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(15)<<std::left<<"Section name";
+		out<<std::setw(1)<<"|";
+		out<<"\n";
+		out<<"-----------------------------------------------------\n";
 	}
 
-	void printRelocTableElem(){
-		std::cout<<std::setw(15)<<std::left<<*symbolName;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(10)<<std::left<<offset;
-		std::cout<<std::setw(1)<<"|";
+	void printRelocTableElem(std::ostream& out = std::cout){
+		out<<std::setw(15)<<std::left<<*symbolName;
+		out<<std::setw(1)<<"|";
+		out<<std::setw(10)<<std::left<<offset;
+		out<<std::setw(1)<<"|";
 		switch(type){
 			case RelocType::VALUE:{
-				std::cout<<std::setw(10)<<std::left<<"VALUE";
+				out<<std::setw(10)<<std::left<<"VALUE";
 				break;
 			}
 			case RelocType::JMP_OP:{
-				std::cout<<std::setw(10)<<std::left<<"JMP_OP";
+				out<<std::setw(10)<<std::left<<"JMP_OP";
 				break;
 			}
 			case RelocType::DATA_OP:{
-				std::cout<<std::setw(10)<<std::left<<"DATA_OP";
+				out<<std::setw(10)<<std::left<<"DATA_OP";
 				break;
 			}
 		}
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(15)<<std::left<<*sectionName;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<"\n";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(15)<<std::left<<*sectionName;
+		out<<std::setw(1)<<"|";
+		out<<"\n";
 	}
 };
 
@@ -144,33 +145,33 @@ struct LitPoolElem{ // addressed pc rel from instruction
 		reloc=rel;
 	}
 
-	static void printLitPoolHeader(){
-		std::cout<<std::setw(10)<<std::left<<"Value";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(10)<<std::left<<"I Address";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(10)<<std::left<<"Resolved";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(15)<<std::left<<"Reloc Sym name";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<"\n";
-		std::cout<<"-------------------------------------------------------------\n";
+	static void printLitPoolHeader(std::ostream& out = std::cout){
+		out<<std::setw(10)<<std::left<<"Value";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(10)<<std::left<<"I Address";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(10)<<std::left<<"Resolved";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(15)<<std::left<<"Reloc Sym name";
+		out<<std::setw(1)<<"|";
+		out<<"\n";
+		out<<"-------------------------------------------------------------\n";
 	}
 
-	void printLitPoolElem(){
-		std::cout<<std::setw(10)<<std::left<<value;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(10)<<std::left<<addressOfInstruction;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(10)<<std::left<<(resolved?"YES":"NOT");
-		std::cout<<std::setw(1)<<"|";
+	void printLitPoolElem(std::ostream& out = std::cout){
+		out<<std::setw(10)<<std::left<<value;
+		out<<std::setw(1)<<"|";
+		out<<std::setw(10)<<std::left<<addressOfInstruction;
+		out<<std::setw(1)<<"|";
+		out<<std::setw(10)<<std::left<<(resolved?"YES":"NOT");
+		out<<std::setw(1)<<"|";
 		if(resolved || reloc==NULL){
-			std::cout<<std::setw(15)<<std::left<<"";
+			out<<std::setw(15)<<std::left<<"";
 		}else{
-			std::cout<<std::setw(15)<<std::left<<*(reloc->symbolName);
+			out<<std::setw(15)<<std::left<<*(reloc->symbolName);
 		}
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<"\n";
+		out<<std::setw(1)<<"|";
+		out<<"\n";
 	}
 };
 
@@ -192,51 +193,47 @@ struct Section{
 	std::map<std::string, SymbolTableElem> symbolTable;
 	//std::map<std::string, uint32_t> symTabNameToId;
 	std::vector<LitPoolElem> litPool;
+	std::vector<std::vector<LitPoolElem>> oldLitPools;
 	std::vector<UnprocessedInstruction> unprocessedInstructions;
 
 	/*void addSymbol(SymbolTableElem sym){
 		symbolTable.push_back(sym);
 	}*/
 
-	void printSection(){
-		std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<id;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(15)<<std::left<<*sectionName;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<size;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(15)<<std::left<<startAddress;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(13)<<std::left<<endAddress;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(18)<<std::left<<locationCounter;
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<"\n";
+	void printSection(std::ostream& out = std::cout){
+		
+		out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<id;
+		out<<std::setw(1)<<"|";
+		out<<std::setw(15)<<std::left<<*sectionName;
+		out<<std::setw(1)<<"|";
+		out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<size;
+		out<<std::setw(1)<<"|";
+		out<<std::setw(15)<<std::left<<startAddress;
+		out<<std::setw(1)<<"|";
+		out<<std::setw(13)<<std::left<<endAddress;
+		out<<std::setw(1)<<"|";
+		out<<std::setw(18)<<std::left<<locationCounter;
+		out<<std::setw(1)<<"|";
+		out<<"\n";
 	}
-	static void printSectionHeader(){
-		std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"ID";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(15)<<std::left<<"Section name";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"Size";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(15)<<std::left<<"Start address";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(13)<<std::left<<"End address";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<std::setw(18)<<std::left<<"Location counter";
-		std::cout<<std::setw(1)<<"|";
-		std::cout<<"\n--------------------------------------------------------------------------------------\n";
+	static void printSectionHeader(std::ostream& out = std::cout){
+		out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"ID";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(15)<<std::left<<"Section name";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"Size";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(15)<<std::left<<"Start address";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(13)<<std::left<<"End address";
+		out<<std::setw(1)<<"|";
+		out<<std::setw(18)<<std::left<<"Location counter";
+		out<<std::setw(1)<<"|";
+		out<<"\n--------------------------------------------------------------------------------------\n";
 	}
 
 };
 
-
-
-struct LitPool{
-	std::vector<LitPoolElem> pool;
-	uint32_t startAddress = 0;
-};
 
 
 
@@ -245,7 +242,7 @@ struct LitPool{
 class Assembler{
 public:
 	Assembler();
-	//~Assembler();
+	~Assembler();
 	void assemble();
 	void processLine(Line* line);
 	void addLabel(uint32_t address, std::string* label);
@@ -259,6 +256,7 @@ public:
 	void printSections();
 	void printLitPools();
 	void printDebug();
+	void setOutputFiles(std::string outputFilename);
 private:
 	uint32_t LC;
 	uint32_t inputFileLineNum;
@@ -267,12 +265,14 @@ private:
 	//std::vector<RelocTableElem> relocationTable;
 	std::map<std::string, Section> sections;
 	Section* currentSection;
-	//std::vector<uint8_t> code;
+	std::ofstream outTxt;
+	std::ofstream outBin;
+	bool setOutput = false;
 
 	void push32bitsToCode(uint32_t word);
 
 	//void processJMPoperand(Operand op);
-	uint32_t processJumpInstructions(Operand op); //returns instruction
+	uint32_t processJumpInstructions(Operand op, Section* s,uint32_t addresOfInstruction); //returns instruction
 	void addToLitPool(SymOrLit sol, Section* sec, uint32_t addressOfInstr);
 	void insertLitPool(); // insert lit pool to code
 	void endSection();

@@ -1,6 +1,8 @@
 #include "../inc/Assembler.hpp"
 #include "../inc/parser.hpp"
 #include "../inc/lexer.hpp"
+#include <iostream>
+#include <fstream>
 
 uint32_t SymbolTableElem::idCounter=0;
 
@@ -56,6 +58,9 @@ void Assembler::processLine(Line* line){
 		}
 	}
 	
+	if(currentSection!=NULL && currentSection->locationCounter > 2000){
+		insertLitPool();
+	}
 	
 	// process directive
 	if(line->type==Line::DIRECTIVE){
@@ -271,7 +276,7 @@ void Assembler::processDirective(Directive* directive){
 				//end section
 				endSection();
 				endFile();
-				std::cout<<"End\n";
+				std::cout<<"End!\n";
 				break;
 			}
 			default:
@@ -317,15 +322,16 @@ void Assembler::addToLitPool(SymOrLit sol, Section* section=NULL, uint32_t addre
  * OCM=1 when gpr<=mem32[gpr+D]; (litpool)
  * D:disp to lit pool adr of operand
  */
-uint32_t Assembler::processJumpInstructions(Operand op){
+uint32_t Assembler::processJumpInstructions(Operand op,Section* section=NULL, uint32_t addressOfInstruction=-1){
 // highest byte set to 0 when adressing is direct(pc rel), 1 when indirect(mem[pc rel])
-
+	section = section==NULL ? currentSection : section;
+	addressOfInstruction = addressOfInstruction==(uint32_t)-1 ? section->locationCounter : addressOfInstruction;
 	uint32_t instrWord=0;
 
 	if(op.type==Operand::LIT){
 		if((int32_t)op.literal>2047 || (int32_t)op.literal<-2048 ){ // lit bigger than 12 bits,has to go to litpool
 			instrWord |= 1 <<24; // indirect adressing
-			addToLitPool(SymOrLit{.type=SymOrLit::LITERAL, .literal=op.literal}); //CORECT
+			addToLitPool(SymOrLit{.type=SymOrLit::LITERAL, .literal=op.literal},section,addressOfInstruction); //CORECT
 			return instrWord;
 		}else{
 			// lit can be put in instruction
@@ -340,18 +346,18 @@ uint32_t Assembler::processJumpInstructions(Operand op){
 			SymbolTableElem* el = & (symbolTable[*(op.symbol)]);
 			if(el->type==SymbolType::EXTERN){
 				instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
-				addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, .symbol=op.symbol});
+				addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, .symbol=op.symbol},section,addressOfInstruction);
 			}else 
 			if(el->type==SymbolType::GLOBAL){
 				if(el->value!=0 || el->sectionName!=NULL){ 
 					//defined global sym
 					// now acts as literal
-					if(el->sectionName==currentSection->sectionName){
-						int32_t disp= el->value - currentSection->locationCounter;
+					if(el->sectionName==section->sectionName){
+						int32_t disp= el->value - addressOfInstruction;
 						if(disp>2047 || disp<-2048){
 							//disp bigger than 12 bits, has to go to litpool
 							instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
-							addToLitPool(SymOrLit{.type=SymOrLit::LITERAL, .literal=disp}); //CORECT
+							addToLitPool(SymOrLit{.type=SymOrLit::LITERAL, .literal=disp},section,addressOfInstruction); //CORECT
 							return instrWord;
 						}else{
 							//disp can be put in instruction
@@ -362,24 +368,24 @@ uint32_t Assembler::processJumpInstructions(Operand op){
 					}else{
 						//another section global sym, litpool
 						instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
-						addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, .symbol=op.symbol});
+						addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, .symbol=op.symbol},section,addressOfInstruction);
 					}
 				}else{
 					//undefined global sym litpool
 					instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
-					addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, .symbol=op.symbol});
+					addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, .symbol=op.symbol},section,addressOfInstruction);
 				}
 			}else 
 			if(el->type==SymbolType::SECTION)
-				std::cout<<"Error on line"<<this->inputFileLineNum<<": Call to section symbol\n";			
-		}else if(currentSection->symbolTable.find(*(op.symbol))!=currentSection->symbolTable.end()){
+				std::cout<<"Error on line"<<this->inputFileLineNum<<": Jump to section symbol\n";			
+		}else if(section->symbolTable.find(*(op.symbol))!=section->symbolTable.end()){
 			//defined local elem
-			SymbolTableElem* el = & (currentSection->symbolTable[*(op.symbol)]);
-			int32_t disp= el->value - currentSection->locationCounter;
+			SymbolTableElem* el = & (section->symbolTable[*(op.symbol)]);
+			int32_t disp= el->value - addressOfInstruction;
 			if(disp>2047 || disp<-2048){
 				//disp bigger than 12 bits, has to go to litpool
 				instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
-				addToLitPool(SymOrLit{.type=SymOrLit::LITERAL, .literal=disp}); // correct, known value
+				addToLitPool(SymOrLit{.type=SymOrLit::LITERAL, .literal=disp},section,addressOfInstruction); // correct, known value
 			}else{
 				//disp can be put in instruction
 				instrWord |= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24;
@@ -388,8 +394,9 @@ uint32_t Assembler::processJumpInstructions(Operand op){
 
 		}else{
 			//not found anywhere
-			instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
-			addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, .symbol=op.symbol});
+			//instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
+			//addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, .symbol=op.symbol},section,addressOfInstruction);
+			std::cout<<"Error on address "<<addressOfInstruction<<": Jump to undefined symbol\n";
 		}
 	}
 	return instrWord;
@@ -441,26 +448,9 @@ void Assembler::processInstruction(Instruction* instr){
 				break;
 			}
 			case Instruction::CALL:{
-				// push pc; pc<=op;
-				// OC=21: push pc; pc<=mem32[gpr[A]+gpr[B]+D];
-				// A:pc, B:0, D:disp to lit pool adr of operand
 
-				instrWord = processJumpInstructions(instr->operands[0]); // sets D and adressing
-
-				if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
-					instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
-					instrWord |= (uint32_t)InstructionCode::CALL_M<<24;
-				}else{
-					instrWord ^= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24; // clear adressing
-					instrWord |= (uint32_t)InstructionCode::CALL<<24;
-				}
-
-				instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
-
-				push32bitsToCode(instrWord);
-
-				//currentSection->unprocessedInstructions.push_back({instr, currentSection->locationCounter});
-				//push32bitsToCode(0);
+				currentSection->unprocessedInstructions.push_back({instr, currentSection->locationCounter});
+				push32bitsToCode(0);
 
 				break;
 			}
@@ -475,87 +465,13 @@ void Assembler::processInstruction(Instruction* instr){
 				push32bitsToCode(instrWord);
 				break;
 			}
-			case Instruction::JMP:{
-				// pc<=op;
-				// OC=30: pc<=gpr[A]+D; // pc rel
-				// OC=31: pc<=mem32[gpr[A]+D]; // pc rel from mem
-				// A:pc, D:disp to lit pool adr of operand
-				instrWord = processJumpInstructions(instr->operands[0]); // sets D and adressing
-
-				if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
-					instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
-					instrWord |= (uint32_t)InstructionCode::JMP_M<<24;
-				}else{
-					instrWord ^= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24; // clear adressing
-					instrWord |= (uint32_t)InstructionCode::JMP<<24;
-				}
-				
-				instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
-
-				push32bitsToCode(instrWord);
-				break;
-			}
-			case Instruction::BEQ:{
-				//  if (gpr1 == gpr2) pc <= operand; 
-				// OCM=0x31 if (gpr[B] == gpr[C]) pc<=gpr[A]+D;
-				// OCM=0x39 if (gpr[B] == gpr[C]) pc<=mem32[gpr[A]+D];
-				// A:pc, B:gpr1, C:gpr2, D:disp to lit pool adr of operand
-
-				instrWord = processJumpInstructions(instr->operands[2]); // sets D and adressing
-				if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
-					instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
-					instrWord |= (uint32_t)InstructionCode::BEQ_M<<24;
-				}else{
-					instrWord ^= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24; // clear adressing
-					instrWord |= (uint32_t)InstructionCode::BEQ<<24;
-				}
-
-				instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
-				instrWord |= (uint32_t)instr->operands[0].gpr << 16; // B=gpr1
-				instrWord |= (uint32_t)instr->operands[1].gpr << 12; // C=gpr2
-				push32bitsToCode(instrWord);
-				break;
-			}
-			case Instruction::BNE:{
-				//  if (gpr1 != gpr2) pc <= operand; 
-				// OCM=0x32 if (gpr[B] != gpr[C]) pc<=gpr[A]+D;
-				// OCM=0x3A if (gpr[B] != gpr[C]) pc<=mem32[gpr[A]+D];
-				// A:pc, B:gpr1, C:gpr2, D:disp to lit pool adr of operand
-
-				instrWord = processJumpInstructions(instr->operands[2]); // sets D and adressing
-				if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
-					instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
-					instrWord |= (uint32_t)InstructionCode::BNE_M<<24;
-				}else{
-					instrWord ^= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24; // clear adressing
-					instrWord |= (uint32_t)InstructionCode::BNE<<24;
-				}
-
-				instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
-				instrWord |= (uint32_t)instr->operands[0].gpr << 16; // B=gpr1
-				instrWord |= (uint32_t)instr->operands[1].gpr << 12; // C=gpr2
-				push32bitsToCode(instrWord);
-				break;
-			}
+			case Instruction::JMP:
+			case Instruction::BEQ:
+			case Instruction::BNE:
 			case Instruction::BGT:{
-				//   if (gpr1 signed> gpr2) pc <= operand; 
-				// OCM=0x33  if (gpr[B] signed> gpr[C]) pc<=gpr[A]+D;
-				// OCM=0x39  if (gpr[B] signed> gpr[C]) pc<=mem32[gpr[A]+D];
-				// A:pc, B:gpr1, C:gpr2, D:disp to lit pool adr of operand
-
-				instrWord = processJumpInstructions(instr->operands[2]); // sets D and adressing
-				if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
-					instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
-					instrWord |= (uint32_t)InstructionCode::BGT_M<<24;
-				}else{
-					instrWord ^= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24; // clear adressing
-					instrWord |= (uint32_t)InstructionCode::BGT<<24;
-				}
-
-				instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
-				instrWord |= (uint32_t)instr->operands[0].gpr << 16; // B=gpr1
-				instrWord |= (uint32_t)instr->operands[1].gpr << 12; // C=gpr2
-				push32bitsToCode(instrWord);
+				
+				currentSection->unprocessedInstructions.push_back({instr, currentSection->locationCounter});
+				push32bitsToCode(0);
 				break;
 			}
 			case Instruction::PUSH:{
@@ -749,6 +665,9 @@ void Assembler::processInstruction(Instruction* instr){
 
 void Assembler::insertLitPool(){
 	// insert jump over litpool
+	if(currentSection->litPool.size()==0){
+		return; // no litpool
+	}
 	uint32_t dispAferLitPool = 4/*jmp*/ + currentSection->litPool.size() * 4;
 	if((int32_t)dispAferLitPool>2047){
 		std::cout<<"Error: Litpool too big\n";
@@ -785,11 +704,15 @@ void Assembler::insertLitPool(){
 		}
 		
 	}
+
+	currentSection->oldLitPools.push_back(currentSection->litPool);
+	currentSection->litPool.clear();
 }
 
 void Assembler::postProccessInstructions(){
 	for(UnprocessedInstruction& instr : currentSection->unprocessedInstructions){
 		Section* section = currentSection;
+		uint32_t instrWord=0;
 		switch (instr.instruction->type){
 		case Instruction::LD:{
 			// ld op, gpr -> gpr<=op;
@@ -798,7 +721,6 @@ void Assembler::postProccessInstructions(){
 			// A:gpr
 
 			DataOperand& op = instr.instruction->operands[0].dataOperand;
-			uint32_t instrWord=0;
 			instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 20; // A=gpr
 
 
@@ -996,7 +918,6 @@ void Assembler::postProccessInstructions(){
 			// OC=0x80 mem32[gpr[A]+gpr[B]+D]<=gpr[C];
 			// OC=0x82  mem32[mem32[gpr[A]+gpr[B]+D]]<=gpr[C];
 			DataOperand op = instr.instruction->operands[1].dataOperand;
-			uint32_t instrWord=0;
 			instrWord |= (uint32_t)instr.instruction->operands[0].gpr << 12; // C=gpr
 
 			switch(op.type){
@@ -1173,26 +1094,127 @@ void Assembler::postProccessInstructions(){
 
 			break;
 		}
+		case Instruction::CALL:{
+			// push pc; pc<=op;
+			// OC=21: push pc; pc<=mem32[gpr[A]+gpr[B]+D];
+			// A:pc, B:0, D:disp to lit pool adr of operand
+
+			instrWord = processJumpInstructions(instr.instruction->operands[0],section,instr.address); // sets D and adressing
+
+			if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
+				instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
+				instrWord |= (uint32_t)InstructionCode::CALL_M<<24;
+			}else{
+				instrWord ^= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24; // clear adressing
+				instrWord |= (uint32_t)InstructionCode::CALL<<24;
+			}
+
+			instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
+
+			edit32bitsOfCode(*section,instr.address, instrWord);
+			break;
+		}
+		case Instruction::JMP:{
+			// pc<=op;
+			// OC=30: pc<=gpr[A]+D; // pc rel
+			// OC=31: pc<=mem32[gpr[A]+D]; // pc rel from mem
+			// A:pc, D:disp to lit pool adr of operand
+			instrWord = processJumpInstructions(instr.instruction->operands[0], section, instr.address); // sets D and adressing
+
+			if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
+				instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
+				instrWord |= (uint32_t)InstructionCode::JMP_M<<24;
+			}else{
+				instrWord ^= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24; // clear adressing
+				instrWord |= (uint32_t)InstructionCode::JMP<<24;
+			}
+			
+			instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
+
+			edit32bitsOfCode(*section,instr.address, instrWord);
+			break;
+		}
+		case Instruction::BEQ:{
+			//  if (gpr1 == gpr2) pc <= operand; 
+			// OCM=0x31 if (gpr[B] == gpr[C]) pc<=gpr[A]+D;
+			// OCM=0x39 if (gpr[B] == gpr[C]) pc<=mem32[gpr[A]+D];
+			// A:pc, B:gpr1, C:gpr2, D:disp to lit pool adr of operand
+
+			instrWord = processJumpInstructions(instr.instruction->operands[2], section, instr.address); // sets D and adressing
+			if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
+				instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
+				instrWord |= (uint32_t)InstructionCode::BEQ_M<<24;
+			}else{
+				instrWord ^= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24; // clear adressing
+				instrWord |= (uint32_t)InstructionCode::BEQ<<24;
+			}
+
+			instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
+			instrWord |= (uint32_t)instr.instruction->operands[0].gpr << 16; // B=gpr1
+			instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 12; // C=gpr2
+			edit32bitsOfCode(*section,instr.address, instrWord);
+			break;
+		}
+		case Instruction::BNE:{
+			//  if (gpr1 != gpr2) pc <= operand; 
+			// OCM=0x32 if (gpr[B] != gpr[C]) pc<=gpr[A]+D;
+			// OCM=0x3A if (gpr[B] != gpr[C]) pc<=mem32[gpr[A]+D];
+			// A:pc, B:gpr1, C:gpr2, D:disp to lit pool adr of operand
+
+			instrWord = processJumpInstructions(instr.instruction->operands[2], section, instr.address); // sets D and adressing
+			if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
+				instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
+				instrWord |= (uint32_t)InstructionCode::BNE_M<<24;
+			}else{
+				instrWord ^= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24; // clear adressing
+				instrWord |= (uint32_t)InstructionCode::BNE<<24;
+			}
+
+			instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
+			instrWord |= (uint32_t)instr.instruction->operands[0].gpr << 16; // B=gpr1
+			instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 12; // C=gpr2
+			edit32bitsOfCode(*section,instr.address, instrWord);
+			break;
+		}
+		case Instruction::BGT:{
+			//   if (gpr1 signed> gpr2) pc <= operand; 
+				// OCM=0x33  if (gpr[B] signed> gpr[C]) pc<=gpr[A]+D;
+				// OCM=0x39  if (gpr[B] signed> gpr[C]) pc<=mem32[gpr[A]+D];
+				// A:pc, B:gpr1, C:gpr2, D:disp to lit pool adr of operand
+
+				instrWord = processJumpInstructions(instr.instruction->operands[2], section, instr.address); // sets D and adressing
+				if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
+					instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
+					instrWord |= (uint32_t)InstructionCode::BGT_M<<24;
+				}else{
+					instrWord ^= (uint32_t)InstructionCode::DIRECT_ADDRESSING<<24; // clear adressing
+					instrWord |= (uint32_t)InstructionCode::BGT<<24;
+				}
+
+				instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
+				instrWord |= (uint32_t)instr.instruction->operands[0].gpr << 16; // B=gpr1
+				instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 12; // C=gpr2
+
+				edit32bitsOfCode(*section, instr.address, instrWord);
+				break;
+		}
+	
 		default:
 			break;
 		}
 	}
 }
 
-uint32_t Assembler::processDataOperand(DataOperand op, Section* sec, uint32_t address){
-	uint32_t instrWord=0;
-	
-}
 
 void Assembler::endSection(){
 	if(currentSection!=NULL){
+		postProccessInstructions();
+		insertLitPool();	
+
 		currentSection->endAddress=LC;
 		currentSection->size=LC-currentSection->startAddress;
 
 		symbolTable[ *(currentSection->sectionName) ].size=currentSection->size;
-
-		postProccessInstructions();
-		insertLitPool();	
 	}
 
 	
@@ -1229,10 +1251,13 @@ void Assembler::resolveSymbol(RelocTableElem& el){
 			if(sym->value!=0 || sym->sectionName!=NULL){
 				//defined global sym
 				// debug upis ovo ostaje u relocu
-				if(*(sym->sectionName)==*(el.sectionName)){ // symbol defined in section of relocation, pc rel is possible at this stage
-
+				if(el.type==RelocTableElem::PCREL && *(sym->sectionName)==*(el.sectionName)){ // symbol defined in section of relocation, pc rel is possible at this stage
+					addDispToInstruction( (sections[*(el.sectionName)]), el.offset, sym->value - el.offset);
+				}else
+				if(el.type==RelocTableElem::VALUE){
+					edit32bitsOfCode( (sections[*(el.sectionName)]), el.offset, sym->value);
 				}
-				addDispToInstruction( (sections[*(el.sectionName)]), el.offset, sym->value);
+				
 			}else{
 				std::cout<<"Error: global symbol "<< *(sym->symbolName)<<"still undefined at the end of the file\n";
 				
@@ -1252,10 +1277,12 @@ void Assembler::resolveSymbol(RelocTableElem& el){
 			switch(el.type){
 				case RelocTableElem::VALUE:
 					edit32bitsOfCode( (sections[*(el.sectionName)]), el.offset, sym->value);
-					el.type = RelocTableElem::INVALID;
+					el.symbolName = el.sectionName;
+					// el.type = RelocTableElem::INVALID;  value of symbol will change in linker
 					break;
 				case RelocTableElem::PCREL://TODO false value, need to change operations too	
 					addDispToInstruction( (sections[*(el.sectionName)]), el.offset, sym->value - el.offset);
+					el.symbolName = el.sectionName;
 					//el.type = RelocTableElem::INVALID;
 					break;
 				default:
@@ -1272,53 +1299,60 @@ void Assembler::resolveSymbol(RelocTableElem& el){
 }
 
 void Assembler::printSymbolTable(){
-	std::cout<<"Symbol table:\n";
-	SymbolTableElem::printSymbolTableHeader();
+	outTxt<<"Symbol table:\n";
+	SymbolTableElem::printSymbolTableHeader(outTxt);
 	for(auto el : symbolTable){
-		el.second.printSymbolTableElem();
+		el.second.printSymbolTableElem(outTxt);
 	}
 }
 
 void Assembler::printRelocTable(){
-	std::cout<<"Relocation table:\n";
-	RelocTableElem::printRelocTableHeader();
+	outTxt<<"Relocation table:\n";
+	RelocTableElem::printRelocTableHeader(outTxt);
 	for(auto section : sections){
 		for(RelocTableElem el : section.second.relocationTable){
-			el.printRelocTableElem();
+			el.printRelocTableElem(outTxt);
 		}
 	}
 }
 
 void Assembler::printCode(){
-	std::cout<<"Code:\n";
+	outTxt<<"Code:\n";
 	int i=0;
 	while (i<LC){
 		for(auto section : sections){
 			if(section.second.startAddress==i){
 				int j=0;
 				for(uint8_t byte : section.second.code){
-					std::cout<<i++<<":\t"<<j++<<":\t";
-					std::cout<<std::hex<<(int)byte<<"\n"<<std::dec;
+					outTxt<<i++<<":\t"<<j++<<":\t";
+					outTxt<<std::hex<<(int)byte<<"\n"<<std::dec;
 				}
 			}
 		}
 	}
-	std::cout<<"\n";
+	outTxt<<"\n";
 }
 
 void Assembler::printSections(){
-	Section::printSectionHeader();
+	Section::printSectionHeader(outTxt);
 	for(auto sect : sections){
-		sect.second.printSection();
+		sect.second.printSection(outTxt);
 	}
 }
 
 void Assembler::printLitPools(){
 	for(auto section : sections){
-		std::cout<<"Lit pool for section "<<section.first<<":\n";
-		LitPoolElem::printLitPoolHeader();
+		outTxt<<"Lit pool for section "<<section.first<<":\n";
+		LitPoolElem::printLitPoolHeader(outTxt);
 		for(LitPoolElem el : section.second.litPool){
-			el.printLitPoolElem();
+			el.printLitPoolElem(outTxt);
+		}
+		outTxt<<"Old lit pools for section "<<section.first<<":\n";
+		for(auto pool : section.second.oldLitPools){
+			LitPoolElem::printLitPoolHeader(outTxt);
+			for(LitPoolElem el : pool){
+				el.printLitPoolElem(outTxt);
+			}
 		}
 	}
 	
@@ -1329,8 +1363,71 @@ void Assembler::printDebug(){
 	
 }
 
+void Assembler::setOutputFiles(std::string outputFilename){
+	outTxt.open((outputFilename+".txt").c_str(), std::ios::out);
+	outBin.open((outputFilename+".bin").c_str(), std::ios::out | std::ios::binary);
+	std::cout<<"napravljeni output fajlovi";
+}
+
+int main(int argc, char *argv[])
+{
+	Assembler assembler;
+	std::string inputFilename="./tests/";
+	std::string outputFilename="./build/";
+	if(argc == 2){
+		inputFilename+=argv[1];
+		outputFilename+="assemblerOutput.o";
+	}else
+	if (argc == 4 || strcmp(argv[1], "-o") == 0)
+	{
+		inputFilename+=argv[3];
+		outputFilename+=argv[2];
+	}
+	else{
+		std::cout << "Invalid number or format of arguments!" << std::endl;
+		return 1;
+	}
+	FILE *inputFile = fopen( inputFilename.c_str() , "r");
+	if (!inputFile) {
+		std::cout << "can't open file!" << std::endl;
+		return -1;
+	}
+	//std::ofstream outputFile(outputFilename.c_str(), std::ios::out | std::ios::binary);
+	yyin = inputFile;
+
+	do {
+		yyparse(&assembler);
+	} while (!feof(yyin));
+	//fclose(inputFile);
+	std::cout<<"end of file\n";
+	assembler.setOutputFiles(outputFilename);
+
+	assembler.printSymbolTable();
+	std::cout<<"\n";
+	assembler.printRelocTable();
+	std::cout<<"\n";
+	assembler.printCode();
+	std::cout<<"\n";
+	assembler.printSections();
+	std::cout<<"\n";
+	assembler.printLitPools();
+	//outputFile.close();
+	return 0;
+}
+
+
+
+Assembler::~Assembler(){
+	if(outTxt.is_open())
+		outTxt.close();
+	if(outBin.is_open())
+		outBin.close();
+	
+}
+
+/*
 int main(int, char**) {
-  // open a file handle to a particular file:
+  
   FILE *myfile = fopen("./tests/in.snazzle", "r");
   // make sure it's valid:
   if (!myfile) {
@@ -1357,7 +1454,7 @@ int main(int, char**) {
   std::cout<<"\n";
   assembler.printLitPools();
   
-}
+}*/
 
 void yyerror(Assembler* assembler,const char *s) {
   std::cout << "parse error on line " << yylineno << "!  Message: " << s << std::endl;
