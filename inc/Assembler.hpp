@@ -73,12 +73,23 @@ public:
 
 };
 
+struct LitPoolElem{ // addressed pc rel from instruction
+	uint32_t value;
+	uint32_t addressOfInstruction;
+	//bool resolved=true; // if false, when elem is placed in code, add it to relocation table
+	// is type always absolute?
+};
+
+struct LitPool{
+	std::vector<LitPoolElem> pool;
+	uint32_t startAddress = 0;
+};
 
 
 
 
 
-class Assembler {
+class Assembler{
 public:
 	Assembler();
 	~Assembler();
