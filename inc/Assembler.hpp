@@ -1,179 +1,12 @@
 #ifndef __ASSEMBLER_HPP__
 #define __ASSEMBLER_HPP__
 
-#include <cstdint>
+#include "TableElementTypes.hpp"
 #include "parsingTypes.hpp"
 #include <iomanip>
 #include <vector>
-#include <fstream>
-
-using std::uint32_t;
 
 
-enum class SymbolType{
-	LOCAL, GLOBAL, EXTERN, SECTION
-};
-
-
-#define TABLE_FIELD_WIDTH 10
-struct SymbolTableElem{
-	static uint32_t idCounter;
-	uint32_t id;
-	std::string* symbolName;
-	uint32_t value;
-	SymbolType type;
-	union{
-		std::string* sectionName;
-		uint32_t size;
-	};
-
-	void printSymbolTableElem(std::ostream& out = std::cout){
-		out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<id;
-		out<<std::setw(1)<<"|";
-		out<<std::setw(15)<<std::left<<*symbolName;
-		out<<std::setw(1)<<"|";
-		switch(type){
-			case SymbolType::LOCAL:{
-				out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"LOCAL";
-				break;
-			}
-			case SymbolType::GLOBAL:{
-				out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"GLOBAL";
-				break;
-			}
-			case SymbolType::EXTERN:{
-				out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"EXTERN";
-				break;
-			}
-			case SymbolType::SECTION:{
-				out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<"SECTION";
-				break;
-			}
-		}
-		out<<std::setw(1)<<"|";
-		out<<std::setw(TABLE_FIELD_WIDTH)<<std::left<<value<<"";
-		out<<std::setw(1)<<"|";
-		if(type==SymbolType::SECTION){
-			out<<std::setw(18)<<std::left<<size<<"";
-		}
-		else{
-			out<<std::setw(18)<<std::left<<(sectionName!=NULL?(*sectionName):"0");
-		}
-		out<<std::setw(1)<<"|";
-		out<<"\n";
-	}
-	static void printSymbolTableHeader(std::ostream& out = std::cout){
-		out<<std::setw(10)<<std::left<<"ID";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(15)<<std::left<<"Symbol name";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<"Type";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<"Value";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(18)<<std::left<<"Size/Section name";
-		out<<std::setw(1)<<"|";
-		out<<"\n";
-		out<<"-------------------------------------------------------------------\n";
-
-	}
-};
-
-struct RelocTableElem{
-	enum RelocType{
-		VALUE,
-		JMP_OP, // in instr: pc rel to addres or from lit pool
-		PCREL,
-		DATA_OP, 
-		INVALID
-			};
-	uint32_t offset;// LC, or where elem should be put (relastive to section start)
-	std::string* sectionName; // section where elem should be put
-
-	RelocType type;
-	std::string* symbolName;
-
-	static void printRelocTableHeader(std::ostream& out = std::cout){
-		out<<std::setw(15)<<std::left<<"Symbol name";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<"Offset";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<"Type";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(15)<<std::left<<"Section name";
-		out<<std::setw(1)<<"|";
-		out<<"\n";
-		out<<"-----------------------------------------------------\n";
-	}
-
-	void printRelocTableElem(std::ostream& out = std::cout){
-		out<<std::setw(15)<<std::left<<*symbolName;
-		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<offset;
-		out<<std::setw(1)<<"|";
-		switch(type){
-			case RelocType::VALUE:{
-				out<<std::setw(10)<<std::left<<"VALUE";
-				break;
-			}
-			case RelocType::JMP_OP:{
-				out<<std::setw(10)<<std::left<<"JMP_OP";
-				break;
-			}
-			case RelocType::DATA_OP:{
-				out<<std::setw(10)<<std::left<<"DATA_OP";
-				break;
-			}
-		}
-		out<<std::setw(1)<<"|";
-		out<<std::setw(15)<<std::left<<*sectionName;
-		out<<std::setw(1)<<"|";
-		out<<"\n";
-	}
-};
-
-struct LitPoolElem{ // addressed pc rel from instruction
-	int32_t value;
-	uint32_t addressOfInstruction;
-	bool resolved; // if false, reloc
-	RelocTableElem* reloc;// 
-
-	LitPoolElem(int32_t val,uint32_t adr, bool res=true, RelocTableElem* rel=NULL){
-		value=val;
-		addressOfInstruction=adr;
-		resolved=res;
-		reloc=rel;
-	}
-
-	static void printLitPoolHeader(std::ostream& out = std::cout){
-		out<<std::setw(10)<<std::left<<"Value";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<"I Address";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<"Resolved";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(15)<<std::left<<"Reloc Sym name";
-		out<<std::setw(1)<<"|";
-		out<<"\n";
-		out<<"-------------------------------------------------------------\n";
-	}
-
-	void printLitPoolElem(std::ostream& out = std::cout){
-		out<<std::setw(10)<<std::left<<value;
-		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<addressOfInstruction;
-		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<(resolved?"YES":"NOT");
-		out<<std::setw(1)<<"|";
-		if(resolved || reloc==NULL){
-			out<<std::setw(15)<<std::left<<"";
-		}else{
-			out<<std::setw(15)<<std::left<<*(reloc->symbolName);
-		}
-		out<<std::setw(1)<<"|";
-		out<<"\n";
-	}
-};
 
 struct UnprocessedInstruction{
 	Instruction* instruction;
@@ -181,7 +14,8 @@ struct UnprocessedInstruction{
 	uint32_t address; // in section
 };
 
-struct Section{
+class Section : public Serializable{
+public:
 	uint32_t id;
 	std::string* sectionName;
 	uint32_t size;
@@ -194,11 +28,16 @@ struct Section{
 	//std::map<std::string, uint32_t> symTabNameToId;
 	std::vector<LitPoolElem> litPool;
 	std::vector<std::vector<LitPoolElem>> oldLitPools;
+	// number of times lc for section passed 2000
+	uint32_t litPoolThresholdsReached; 
 	std::vector<UnprocessedInstruction> unprocessedInstructions;
 
 	/*void addSymbol(SymbolTableElem sym){
 		symbolTable.push_back(sym);
 	}*/
+
+	virtual void serialize(std::ofstream& out);
+	virtual void deserialize(std::ifstream& in);
 
 	void printSection(std::ostream& out = std::cout){
 		
@@ -239,24 +78,44 @@ struct Section{
 
 
 
-class Assembler{
+class Assembler {
 public:
 	Assembler();
 	~Assembler();
 	void assemble();
 	void processLine(Line* line);
+private:
 	void addLabel(uint32_t address, std::string* label);
 	void declareGlobalSymbol(std::string* symbol);
 	void declareExternSymbol(std::string* symbol);
 	void processDirective(Directive* dir);
 	void processInstruction(Instruction* instr);
+public:
+	std::map<std::string, SymbolTableElem> getSymbolTable(){
+		return symbolTable;
+	};
+	std::map<std::string, Section> getSections(){
+		return sections;
+	};
 	void printSymbolTable();
+	void printSymbolTable(std::ostream &out);
 	void printRelocTable();
 	void printCode();
 	void printSections();
 	void printLitPools();
 	void printDebug();
 	void setOutputFiles(std::string outputFilename);
+	void closeOutputFile(std::ofstream& out){
+		out.close();
+	}
+
+	
+	std::ofstream& getOutTxt(){
+		return outTxt;
+	}
+	std::ofstream& getOutBin(){
+		return outBin;
+	}
 private:
 	uint32_t LC;
 	uint32_t inputFileLineNum;
@@ -283,6 +142,27 @@ private:
 	void addDispToInstruction(Section& s, uint32_t address, int32_t disp);
 	void postProccessInstructions();
 	uint32_t processDataOperand(DataOperand op, Section* sec, uint32_t address);
+};
+
+
+class ObjectFile : public Serializable{
+	//symbol table
+	//sections(wth code and relocation tables)
+private:
+	std::map<std::string, SymbolTableElem> symbolTable;
+	std::map<std::string, Section> sections;
+public:
+	ObjectFile(Assembler& as){
+		symbolTable = as.getSymbolTable();
+		sections = as.getSections();
+	}
+	ObjectFile(){}
+	ObjectFile(std::ifstream& in){
+		deserialize(in);
+	}
+	//~ObjectFile();
+	virtual void serialize(std::ofstream& out);
+	virtual void deserialize(std::ifstream& in);
 };
 
 

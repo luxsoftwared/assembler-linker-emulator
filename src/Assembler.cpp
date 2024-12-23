@@ -3,6 +3,7 @@
 #include "../inc/lexer.hpp"
 #include <iostream>
 #include <fstream>
+//#include "Assembler.hpp"
 
 uint32_t SymbolTableElem::idCounter=0;
 
@@ -10,6 +11,7 @@ uint32_t SymbolTableElem::idCounter=0;
 Assembler::Assembler(){
 	LC=0;
 	currentSection=NULL;
+
 }
 
 void Assembler::assemble(){
@@ -58,7 +60,8 @@ void Assembler::processLine(Line* line){
 		}
 	}
 	
-	if(currentSection!=NULL && currentSection->locationCounter > 2000){
+	if(currentSection!=NULL && currentSection->locationCounter / 2000 > currentSection->litPoolThresholdsReached ){
+		currentSection->litPoolThresholdsReached++;
 		insertLitPool();
 	}
 	
@@ -215,6 +218,7 @@ void Assembler::processDirective(Directive* directive){
 					sect.size=0;
 					sect.sectionName=directive->symbol;
 					sect.locationCounter=0;
+					sect.litPoolThresholdsReached=0;
 					sections[ *(directive->symbol) ]=sect;
 					
 					currentSection= &( sections[ *(directive->symbol) ]) ;
@@ -291,10 +295,10 @@ void Assembler::addToLitPool(SymOrLit sol, Section* section=NULL, uint32_t addre
 	if(sol.type==SymOrLit::SYMBOL){
 		// unfinished reloc entry
 		section->relocationTable.push_back(
-			RelocTableElem{.offset=section->locationCounter,  // instead of this, it will be adress of litpool el
-			.sectionName=section->sectionName,
-			.type = RelocTableElem::VALUE, // correct, want to just paste the value to lit pool
-			.symbolName= sol.symbol }
+			RelocTableElem(/*offset*/section->locationCounter,  // instead of this, it will be adress of litpool el
+			/*sectionName*/section->sectionName,
+			/*type*/ RelocTableElem::VALUE, // correct, want to just paste the value to lit pool
+			/*symbolName*/ sol.symbol )
 		);
 
 		// D add to litpool
@@ -1090,6 +1094,9 @@ void Assembler::postProccessInstructions(){
 						std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> undefined symbol\n";
 					}
 				}
+				default:
+					break;
+			
 			}
 
 			break;
@@ -1230,7 +1237,7 @@ void Assembler::endFile(){
 
 			
 		}
-		for(int i=0;i< section.second.relocationTable.size();i++){
+		for(size_t i=0; i< section.second.relocationTable.size();i++){
 			if(section.second.relocationTable[i].type==RelocTableElem::INVALID){
 				section.second.relocationTable.erase(section.second.relocationTable.begin()+i);
 				i--;
@@ -1306,6 +1313,14 @@ void Assembler::printSymbolTable(){
 	}
 }
 
+void Assembler::printSymbolTable(std::ostream &out){
+	out<<"Symbol table:\n";
+	SymbolTableElem::printSymbolTableHeader(out);
+	for(auto el : symbolTable){
+		el.second.printSymbolTableElem(out);
+	}
+}
+
 void Assembler::printRelocTable(){
 	outTxt<<"Relocation table:\n";
 	RelocTableElem::printRelocTableHeader(outTxt);
@@ -1318,7 +1333,7 @@ void Assembler::printRelocTable(){
 
 void Assembler::printCode(){
 	outTxt<<"Code:\n";
-	int i=0;
+	uint32_t i=0;
 	while (i<LC){
 		for(auto section : sections){
 			if(section.second.startAddress==i){
@@ -1369,6 +1384,8 @@ void Assembler::setOutputFiles(std::string outputFilename){
 	std::cout<<"napravljeni output fajlovi";
 }
 
+
+
 int main(int argc, char *argv[])
 {
 	Assembler assembler;
@@ -1401,7 +1418,7 @@ int main(int argc, char *argv[])
 	//fclose(inputFile);
 	std::cout<<"end of file\n";
 	assembler.setOutputFiles(outputFilename);
-
+	std::cout<<"output files set, start printing\n";
 	assembler.printSymbolTable();
 	std::cout<<"\n";
 	assembler.printRelocTable();
@@ -1411,7 +1428,25 @@ int main(int argc, char *argv[])
 	assembler.printSections();
 	std::cout<<"\n";
 	assembler.printLitPools();
-	//outputFile.close();
+
+	assembler.closeOutputFile(assembler.getOutTxt());
+
+	std::cout<<"Before serialization\n";
+
+	ObjectFile(assembler).serialize(assembler.getOutBin());
+	//assembler.serialize(assembler.getOutBin());
+	
+	std::cout<<"Serialization completed\n";
+	assembler.closeOutputFile(assembler.getOutBin());
+
+/* Testing Deserialization
+	std::ifstream inBin("./build/snazzleOut.bin", std::ios::in | std::ios::binary);
+	ObjectFile obj(inBin);
+	std::cout<<"DeSerialization completed\n";
+	//obj.printSymbolTable(std::cout);
+	inBin.close();
+*/
+	
 	return 0;
 }
 
@@ -1460,4 +1495,92 @@ void yyerror(Assembler* assembler,const char *s) {
   std::cout << "parse error on line " << yylineno << "!  Message: " << s << std::endl;
   // might as well halt now:
   exit(-1);
+}
+
+void Section::serialize(std::ofstream &out)
+{
+	// section name
+	uint32_t len = sectionName->length();
+	out.write((char*)&len,sizeof(len));
+	out.write(sectionName->c_str(),len);
+	//size
+	out.write((char*)&size,sizeof(size));
+	// reloc table
+	len = relocationTable.size();
+	out.write((char*)&len,sizeof(len));
+	for(auto& el : relocationTable){
+		el.serialize(out);
+	}
+	// code
+	len = code.size();
+	out.write((char*)&len,sizeof(len));
+	out.write((char*)&code[0],len);
+	
+}
+
+void Section::deserialize(std::ifstream &in)
+{
+	// section name
+	uint32_t len;
+	in.read((char*)&len,sizeof(len));
+	char* name = new char[len];
+	in.read(name,len);
+	sectionName = new std::string(name);
+	delete[] name;
+	//size
+	in.read((char*)&size,sizeof(size));
+	// reloc table
+	in.read((char*)&len,sizeof(len));
+	for(uint32_t i=0; i<len; i++){
+		RelocTableElem el;
+		el.deserialize(in);
+		relocationTable.push_back(el);
+	}
+	// code
+	in.read((char*)&len,sizeof(len));
+	code.resize(len);
+	in.read((char*)&code[0],len);
+}
+
+
+void ObjectFile::serialize(std::ofstream &out ){
+	// serialize symbol table
+	uint32_t size = symbolTable.size();
+	out.write((char*)&size, sizeof(uint32_t));
+	for(auto el : symbolTable){
+		el.second.serialize(out);
+	}
+
+	// serialize sections & their relocation tables
+	size = sections.size();
+	out.write((char*)&size, sizeof(uint32_t));
+	for(auto section : sections){
+		section.second.serialize(out);
+	}
+
+
+
+}
+
+void ObjectFile::deserialize(std::ifstream &in){
+	// deserialize symbol table
+	uint32_t size;
+	in.read((char*)&size, sizeof(uint32_t));
+	for(uint32_t i=0; i<size; i++){
+		SymbolTableElem el;
+		el.deserialize(in);
+		symbolTable[*(el.symbolName)]=el;
+	}
+
+	// deserialize sections & their relocation tables
+	in.read((char*)&size, sizeof(uint32_t));
+	for(uint32_t i=0; i<size; i++){
+		Section sect;
+		sect.deserialize(in);
+		sections[*(sect.sectionName)]=sect;
+	}
+
+	// thats the whole file; close it
+	in.close();
+	
 }
