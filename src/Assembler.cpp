@@ -305,13 +305,14 @@ void Assembler::addToLitPool(SymOrLit sol, Section* section=NULL, uint32_t addre
 		section->litPool.push_back(
 			LitPoolElem{ 0,
 			addressOfInstruction,
-			false,
-			&(section->relocationTable.back())} 
+			//false,
+			//&(section->relocationTable.back())
+			} 
 		);
 		
 	}else{
 		section->litPool.push_back(
-			LitPoolElem{(int32_t)sol.literal,
+			LitPoolElem{(uint32_t)sol.literal,
 			addressOfInstruction,
 			}
 		);
