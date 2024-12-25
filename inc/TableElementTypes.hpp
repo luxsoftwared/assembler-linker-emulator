@@ -93,6 +93,7 @@ public:
 	}
 
 	void serialize(std::ofstream& out){
+		std::cout<< "SymbolTable serialization";
 		out.write((char*)&id,sizeof(id));
 		uint32_t len = symbolName->length();
 		out.write((char*)&len,sizeof(len));
@@ -215,6 +216,7 @@ public:
 
 
 	void serialize(std::ofstream& out){
+		std::cout<<"RelocTable serialization\n";
 		uint32_t len = symbolName->length();
 		out.write((char*)&len,sizeof(len));
 		out.write(symbolName->c_str(),len);

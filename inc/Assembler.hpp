@@ -145,28 +145,6 @@ private:
 };
 
 
-class ObjectFile : public Serializable{
-	//symbol table
-	//sections(wth code and relocation tables)
-public:
-	std::map<std::string, SymbolTableElem> symbolTable;
-	std::map<std::string, Section> sections;
-public:
-	ObjectFile(Assembler& as){
-		symbolTable = as.getSymbolTable();
-		sections = as.getSections();
-	}
-	ObjectFile(){}
-	ObjectFile(std::ifstream& in){
-		deserialize(in);
-	}
-	//~ObjectFile();
-	virtual void serialize(std::ofstream& out);
-	virtual void deserialize(std::ifstream& in);
-	std::map<std::string, SymbolTableElem> getSymbolTable() const { return symbolTable; }
-
-};
-
 
 enum class InstructionCode{
 	HALT=0x00,

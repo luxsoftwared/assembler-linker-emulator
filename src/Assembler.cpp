@@ -3,7 +3,7 @@
 #include "../inc/lexer.hpp"
 #include <iostream>
 #include <fstream>
-//#include "Assembler.hpp"
+#include "../inc/ObjFile.hpp"
 
 uint32_t SymbolTableElem::idCounter=0;
 
@@ -1506,7 +1506,7 @@ void Section::serialize(std::ofstream &out)
 	out.write((char*)&len,sizeof(len));
 	out.write(sectionName->c_str(),len);
 	//size
-	out.write((char*)&size,sizeof(size));
+	//out.write((char*)&size,sizeof(size));
 	// reloc table
 	len = relocationTable.size();
 	out.write((char*)&len,sizeof(len));
@@ -1530,7 +1530,7 @@ void Section::deserialize(std::ifstream &in)
 	sectionName = new std::string(name);
 	delete[] name;
 	//size
-	in.read((char*)&size,sizeof(size));
+	//in.read((char*)&size,sizeof(size));
 	// reloc table
 	in.read((char*)&len,sizeof(len));
 	for(uint32_t i=0; i<len; i++){
@@ -1544,45 +1544,3 @@ void Section::deserialize(std::ifstream &in)
 	in.read((char*)&code[0],len);
 }
 
-
-void ObjectFile::serialize(std::ofstream &out ){
-	// serialize symbol table
-	uint32_t size = symbolTable.size();
-	out.write((char*)&size, sizeof(uint32_t));
-	for(auto el : symbolTable){
-		el.second.serialize(out);
-	}
-
-	// serialize sections & their relocation tables
-	size = sections.size();
-	out.write((char*)&size, sizeof(uint32_t));
-	for(auto section : sections){
-		section.second.serialize(out);
-	}
-
-
-
-}
-
-void ObjectFile::deserialize(std::ifstream &in){
-	// deserialize symbol table
-	uint32_t size;
-	in.read((char*)&size, sizeof(uint32_t));
-	for(uint32_t i=0; i<size; i++){
-		SymbolTableElem el;
-		el.deserialize(in);
-		symbolTable[*(el.symbolName)]=el;
-	}
-
-	// deserialize sections & their relocation tables
-	in.read((char*)&size, sizeof(uint32_t));
-	for(uint32_t i=0; i<size; i++){
-		Section sect;
-		sect.deserialize(in);
-		sections[*(sect.sectionName)]=sect;
-	}
-
-	// thats the whole file; close it
-	in.close();
-	
-}

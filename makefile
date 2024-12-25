@@ -16,6 +16,9 @@ build:
 assemble: src/lexer.cpp src/parser.cpp
 	g++ src/lexer.cpp src/parser.cpp src/Assembler.cpp  $(CFLAGS) -o build/asembler
 
+link: 
+	g++ src/Linker.cpp $(CFLAGS) -o build/linker
+
 CFLAGS= -std=c++11 -Wall -Wextra -o3
 
 lexAndParse:  src/parser.cpp src/lexer.cpp
