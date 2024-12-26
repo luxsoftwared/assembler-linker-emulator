@@ -20,6 +20,7 @@ jmp glS1 	#ok
 add %r0,%r1
 glS1:
 .word 0x5555
+.section trecaSekcija
 csrrd %cause, %r3
 ld [%r2+glS2],%r3 #Ok radi
 .end

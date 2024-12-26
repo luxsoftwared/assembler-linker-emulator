@@ -1,0 +1,21 @@
+Symbol table:
+ID        |Symbol name    |Type      |Value     |Size/Section name |
+-------------------------------------------------------------------
+0         |extS1          |GLOBAL    |0         |sekcijaDrugogFajla|
+1         |sekcijaDrugogFajla|SECTION   |0         |4                 |
+Relocation table:
+Symbol name    |Offset    |Type      |Section name   |
+-----------------------------------------------------
+Code:
+0:	0:	ba
+1:	1:	ba
+2:	2:	fa
+3:	3:	fa
+
+ID        |Section name   |Size      |Start address  |End address  |Location counter  |
+--------------------------------------------------------------------------------------
+1         |sekcijaDrugogFajla|4         |0              |4            |4                 |
+Lit pool for section sekcijaDrugogFajla:
+Value     |I Address |Resolved  |Reloc Sym name |
+-------------------------------------------------------------
+Old lit pools for section sekcijaDrugogFajla:

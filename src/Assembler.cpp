@@ -253,8 +253,8 @@ void Assembler::processDirective(Directive* directive){
 								sym_val=el->value; //local
 							}
 						}else{} // not defined symbol, add to relocation table
-						currentSection->relocationTable.push_back({currentSection->locationCounter,
-									currentSection->sectionName, RelocTableElem::VALUE, sol.symbol });
+						currentSection->relocationTable.push_back(RelocTableElem(currentSection->locationCounter,
+									currentSection->sectionName, RelocTableElem::VALUE, sol.symbol ));
 						push32bitsToCode(sym_val);
 						
 					}else{
@@ -1382,7 +1382,7 @@ void Assembler::printDebug(){
 
 void Assembler::setOutputFiles(std::string outputFilename){
 	outTxt.open((outputFilename+".txt").c_str(), std::ios::out);
-	outBin.open((outputFilename+".bin").c_str(), std::ios::out | std::ios::binary);
+	outBin.open((outputFilename+".o").c_str(), std::ios::out | std::ios::binary);
 	std::cout<<"napravljeni output fajlovi";
 }
 
@@ -1392,10 +1392,10 @@ int main(int argc, char *argv[])
 {
 	Assembler assembler;
 	std::string inputFilename="./tests/";
-	std::string outputFilename="./build/";
+	std::string outputFilename="./outputs/";
 	if(argc == 2){
 		inputFilename+=argv[1];
-		outputFilename+="assemblerOutput.o";
+		outputFilename+= std::string(argv[1]) + "_assemblyOut";
 	}else
 	if (argc == 4 || strcmp(argv[1], "-o") == 0)
 	{

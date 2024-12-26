@@ -1,0 +1,5 @@
+
+.global extS1
+.section sekcijaDrugogFajla
+extS1: .word 0xfafababa
+.end

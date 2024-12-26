@@ -28,20 +28,20 @@ void Linker::link()
 
 	// merge files
 	if(!mergeSymbolTablesAndSections()){
-		std::cerr<<"ERROR: linking failed\n";
+		std::cerr<<"ERROR: symbol table construction failed\n";
 		return;
 	}
 
 	// place sections
 	
 	if(!placeSections()){
-		std::cerr<<"ERROR: linking failed\n";
+		std::cerr<<"ERROR: section placement failed\n";
 		return;
 	}
 
 	// resolve relocations
 	if(!resolveRelocations()){
-		std::cerr<<"ERROR: linking failed\n";
+		std::cerr<<"ERROR: resolving relocations failed\n";
 		return;
 	}
 
@@ -63,10 +63,36 @@ void Linker::addSectionPlacementReq(const std::string &sectionName, uint32_t add
 void Linker::generateOutputFiles()
 {
 	std::cout<<"Generating output files...\n";
-	std::ofstream outTxt((outputFilename+".txt").c_str(), std::ios::out);
+	std::ofstream outTxt(("./outputs/"+outputFilename+".txt").c_str(), std::ios::out);
+	uint32_t displayedAddress = 0;
+	uint32_t i = 0;
 	for(auto& code: initCode){
-		// TODO set format to print 8 bytes?
-		outTxt<<std::hex<<std::setw(8)<<code.first<<":"<<std::setw(2)<<code.second;
+		// print byte by byte
+		//outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<":"<<std::setw(2)<<(uint32_t)code.second<<"\n";
+		// print 8 bytes per line
+		if(i==0){
+			outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<": ";
+			displayedAddress = code.first;
+		}else if(code.first != displayedAddress+i){
+			for(;i<8;i++){
+				outTxt<<std::setw(2)<<"00 ";
+			}
+			outTxt<<"\n";
+			outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<": ";
+			displayedAddress = code.first;
+		}
+
+		outTxt<<std::setw(2)<<(uint32_t)code.second<<" ";
+		i++;
+		
+		
+		
+		if(i==8){
+			outTxt<<"\n";
+			i=0;
+		}
+
+		
 	}
 	outTxt.close();
 
@@ -242,24 +268,35 @@ bool Linker::resolveRelocations()
 	{
 		for(auto &reloc : section.second.relocationTable)
 		{
-			if(*reloc.symbolName == "drugaSekcija"){
-				continue;
+			if(reloc.type != RelocTableElem::RelocType::VALUE){
+				std::cerr<<"ERROR: relocation type different from VALUE (absolute), not implemented\n";
+				return false;
 			}
-			//std::cout<<"Resolving relocation: "<<*reloc.symbolName;//<<" in section: "<<section.first<<"\n";
+			
 			uint32_t relocAddress;
-			uint32_t relocValue;
-			std::cout<<"err check -1";
-			SymbolTableElem& symbol = globalSymbolTable[*reloc.symbolName];
-			std::cout<<"err check 0";
-			SymbolTableElem& sectionOfSymbolDefinition = globalSymbolTable[*(globalSymbolTable[*reloc.symbolName].sectionName)];
-			std::cout<<"err check 1";
+			uint32_t relocValue ;
 			SymbolTableElem& sectionOfSymbolUsage = globalSymbolTable[*reloc.sectionName];
-			std::cout<<"err check 2";
-			 relocAddress = sectionOfSymbolUsage.value + reloc.offset;
-			 std::cout<<"err check 3";
-			 relocValue = symbol.value + globalSymbolTable[*sectionOfSymbolDefinition.sectionName].value; // val of sym + address of section where its defined
+			relocAddress = sectionOfSymbolUsage.value + reloc.offset;
+			SymbolTableElem sectionOfSymbolDefinition;
 			
-			
+			if(*reloc.symbolName == *reloc.sectionName){
+				//symbol is a local symbol; defined in the same section where it is used 
+				sectionOfSymbolDefinition = sectionOfSymbolUsage;
+				relocValue = initCode[reloc.offset + sectionOfSymbolUsage.value]; // value of the symbol(relative to its section), written in code durring assembly
+			}else{
+				//global symbol; 
+				if(globalSymbolTable.find(*reloc.symbolName) == globalSymbolTable.end() ){
+					std::cerr<<"ERROR: symbol not found in global symbol table\n";
+					return false;
+				}else if(globalSymbolTable[*reloc.symbolName].type == SymbolType::EXTERN){
+					std::cerr<<"ERROR: extern symbol " +*reloc.symbolName +" is not defined in any file\n";
+					return false;
+				}
+
+				sectionOfSymbolDefinition = globalSymbolTable[*(globalSymbolTable[*reloc.symbolName].sectionName)];
+				relocValue = sectionOfSymbolDefinition.value + globalSymbolTable[*reloc.symbolName].value;
+			}
+
 			
 			switch(reloc.type){
 				case RelocTableElem::RelocType::VALUE:

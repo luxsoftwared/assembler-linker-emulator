@@ -1,0 +1,4 @@
+make assemble
+./build/asembler -o snazzleOut in.snazzle
+make linker
+./build/linker -hex  ./build/snazzleOut.bin
