@@ -1,4 +1,14 @@
+
+# assembling cmd commands
 make assemble
 ./build/asembler -o snazzleOut in.snazzle
+
+# linking cmd commands
 make linker
 ./build/linker -hex  ./build/snazzleOut.bin
+
+# linking two files
+./build/linker -o in.snazzle_linkerOut -hex  ./outputs/in.snazzle_assemblyOut.o ./outputs/in.snazzle2_assemblyOut.o
+
+
+
