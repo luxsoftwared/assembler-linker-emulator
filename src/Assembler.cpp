@@ -26,11 +26,29 @@ void Assembler::push32bitsToCode(uint32_t word){ //little endian
 	LC+=4;
 	currentSection->locationCounter+=4;
 }
+
+void Assembler::push32bitsToCodeBigEndian(uint32_t word){ //obrnuto jer sam zeznuo instr
+	currentSection->code.push_back( (word>>24) & 0xFF);
+	currentSection->code.push_back((word>>16) & 0xFF);
+	currentSection->code.push_back((word>>8) & 0xFF);
+	currentSection->code.push_back(word & 0xFF);
+	LC+=4;
+	currentSection->locationCounter+=4;
+}
+
 void Assembler::edit32bitsOfCode(Section& s, uint32_t address, uint32_t word){ //little endian
 	s.code[address]= (word & 0xFF);
 	s.code[address+1]= ((word>>8) & 0xFF);
 	s.code[address+2]= ((word>>16) & 0xFF);
 	s.code[address+3]= ((word>>24) & 0xFF);
+	
+}
+
+void Assembler::edit32bitsOfCodeBigEndian(Section& s, uint32_t address, uint32_t word){ //little endian
+	s.code[address+3]= (word & 0xFF);
+	s.code[address+2]= ((word>>8) & 0xFF);
+	s.code[address+1]= ((word>>16) & 0xFF);
+	s.code[address]= ((word>>24) & 0xFF);
 	
 }
 
@@ -422,25 +440,16 @@ void Assembler::processInstruction(Instruction* instr){
 	switch(instr->type){
 			case Instruction::HALT:{
 				instrWord = 0;
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::INT:{
 				instrWord |= (uint32_t)InstructionCode::INT<<24;
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::IRET:{
-				// pop pc; pop status;
-
-				// pop pc --> pc<=mem32[sp]; sp<=sp+4;
-				//OC=1001 M=0011: gpr[A]<=mem32[gpr[B]]; gpr[B]<=gpr[B]+D;
-				// A:pc, B:sp, D:4
-				instrWord |= (uint32_t)InstructionCode::POP<<24;
-				instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
-				instrWord |= (uint32_t)GPRType::SP << 16; // B=sp
-				instrWord |= 4; // D=4
-				push32bitsToCode(instrWord);
+				// pop status; pop pc; (mora prvo status, iako tekst kaze drugacije)
 
 				// pop status --> csr[STATUS]<=mem32[sp]; sp<=sp+4;
 				// csr[A]<=mem32[gpr[B]]; gpr[B]<=gpr[B]+D;
@@ -449,13 +458,22 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)CSRType::STATUS << 20; // A=status
 				instrWord |= (uint32_t)GPRType::SP << 16; // B=sp
 				instrWord |= 4; // D=4
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
+
+				// pop pc --> pc<=mem32[sp]; sp<=sp+4;
+				//OC=1001 M=0011: gpr[A]<=mem32[gpr[B]]; gpr[B]<=gpr[B]+D;
+				// A:pc, B:sp, D:4
+				instrWord |= (uint32_t)InstructionCode::POP<<24;
+				instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
+				instrWord |= (uint32_t)GPRType::SP << 16; // B=sp
+				instrWord |= 4; // D=4
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::CALL:{
 
 				currentSection->unprocessedInstructions.push_back({instr, currentSection->locationCounter});
-				push32bitsToCode(0);
+				push32bitsToCodeBigEndian(0);
 
 				break;
 			}
@@ -467,7 +485,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
 				instrWord |= (uint32_t)GPRType::SP << 16; // B=sp
 				instrWord |= 4; // D=4
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::JMP:
@@ -476,18 +494,18 @@ void Assembler::processInstruction(Instruction* instr){
 			case Instruction::BGT:{
 				
 				currentSection->unprocessedInstructions.push_back({instr, currentSection->locationCounter});
-				push32bitsToCode(0);
+				push32bitsToCodeBigEndian(0);
 				break;
 			}
 			case Instruction::PUSH:{
 				// push gpr	-->	sp<=sp-4;	mem32[sp]<=gpr; sp<=sp-4;
 				// OCM=0x81 gpr[A]<=gpr[A]+D; mem32[gpr[A]]<=gpr[C];
-				// A:sp, B:0, C:gpr, D:4
+				// A:sp, B:0, C:gpr, D:-4
 				instrWord |= (uint32_t)InstructionCode::PUSH<<24;
 				instrWord |= (uint32_t)GPRType::SP << 20; // A=sp
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr
-				instrWord |= 4; // D=4
-				push32bitsToCode(instrWord);
+				instrWord |= -4&0xFFF; // D=-4
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::POP:{
@@ -498,7 +516,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)instr->operands[0].gpr << 20; // A=gpr
 				instrWord |= (uint32_t)GPRType::SP << 16; // B=sp
 				instrWord |= 4; // D=4
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 
 
 				break;
@@ -510,7 +528,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)InstructionCode::XCHG<<24;
 				instrWord |= (uint32_t)instr->operands[1].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr0
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::ADD:{
@@ -521,7 +539,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)instr->operands[1].gpr << 20; // A=gpr1
 				instrWord |= (uint32_t)instr->operands[1].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr0
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::SUB:{
@@ -532,7 +550,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)instr->operands[1].gpr << 20; // A=gpr1
 				instrWord |= (uint32_t)instr->operands[1].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr0
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::MUL:{
@@ -543,7 +561,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)instr->operands[1].gpr << 20; // A=gpr1
 				instrWord |= (uint32_t)instr->operands[1].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr0
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::DIV:{
@@ -554,7 +572,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)instr->operands[1].gpr << 20; // A=gpr1
 				instrWord |= (uint32_t)instr->operands[1].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr0
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::NOT:{
@@ -564,7 +582,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)InstructionCode::NOT<<24;
 				instrWord |= (uint32_t)instr->operands[0].gpr << 20; // A=gpr
 				instrWord |= (uint32_t)instr->operands[0].gpr << 16; // B=gpr
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 
 				break;
 			}
@@ -577,7 +595,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)instr->operands[1].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr0
 
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::OR:{
@@ -588,7 +606,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)instr->operands[1].gpr << 20; // A=gpr1
 				instrWord |= (uint32_t)instr->operands[1].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr0
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				
 				break;
 			}
@@ -600,7 +618,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)instr->operands[1].gpr << 20; // A=gpr1
 				instrWord |= (uint32_t)instr->operands[1].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr0
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::SHL:{
@@ -612,7 +630,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)instr->operands[1].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr0
 				
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::SHR:{
@@ -624,7 +642,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)instr->operands[1].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr->operands[0].gpr << 12; // C=gpr0
 				
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			}
 			case Instruction::LD:
@@ -635,14 +653,14 @@ void Assembler::processInstruction(Instruction* instr){
 					case DataOperand::SYM:
 					case DataOperand::LIT:
 					case DataOperand::REL_GPR_SYM: // 2 instructions needed
-						push32bitsToCode(0);
+						push32bitsToCodeBigEndian(0);
 					default:
 						break;
 				}
 				break;
 			case Instruction::ST:
 				currentSection->unprocessedInstructions.push_back({instr, currentSection->locationCounter});
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			case Instruction::CSRRD:
 				// csrrd csr, gpr -> gpr<=csr;
@@ -651,7 +669,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)InstructionCode::CSRRD<<24;
 				instrWord |= (uint32_t)instr->operands[0].gpr << 20; // A=gpr
 				instrWord |= (uint32_t)instr->operands[1].csr << 16; // B=csr
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 
 				break;
 			case Instruction::CSRWR:
@@ -661,7 +679,7 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)InstructionCode::CSRWR<<24;
 				instrWord |= (uint32_t)instr->operands[1].csr << 20; // A=csr
 				instrWord |= (uint32_t)instr->operands[0].gpr << 16; // B=gpr
-				push32bitsToCode(instrWord);
+				push32bitsToCodeBigEndian(instrWord);
 				break;
 			default:
 				std::cout<<"Error in line "<<this->inputFileLineNum <<" in instruction type\n";
@@ -685,7 +703,7 @@ void Assembler::insertLitPool(){
 	instrWord |= (uint32_t)InstructionCode::JMP<<24;
 	instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
 	instrWord |= dispAferLitPool & 0xFFF; // D=disp
-	push32bitsToCode(instrWord);
+	push32bitsToCodeBigEndian(instrWord);
 	
 	//lc<2047
 	// insert litpool
@@ -743,7 +761,7 @@ void Assembler::postProccessInstructions(){
 						instrWord |= (uint32_t) InstructionCode::LD << 24;
 						instrWord |= op.literal & 0xFFF; // direct adressing; ST OCM=0x91  // LD error
 					}
-					edit32bitsOfCode(*section,instr.address, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 					break;
 				case DataOperand::IMM_SYM:{
 					// LD 0x92 B/C:pc D:later
@@ -752,7 +770,7 @@ void Assembler::postProccessInstructions(){
 					// LD 0x92 B:pc D:later
 					instrWord |= (uint32_t) InstructionCode::LD_M << 24; 
 					instrWord |= (uint32_t)GPRType::PC << 16; // B=pc
-					edit32bitsOfCode(*section,instr.address, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 
 					break;
 				}
@@ -766,7 +784,7 @@ void Assembler::postProccessInstructions(){
 					instrWord |= (uint32_t) InstructionCode::LD_M << 24; 
 					instrWord |= (uint32_t)GPRType::PC << 16; // B=pc
 					//D will be edited
-					edit32bitsOfCode(*section,instr.address, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 
 					//gpr<=mem32[gpr]
 					// LD 0x92  A :gpr B:gpr
@@ -774,7 +792,7 @@ void Assembler::postProccessInstructions(){
 					instrWord |= (uint32_t) InstructionCode::LD_M << 24;
 					instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 20; // A=gpr
 					instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 16; // B=gpr
-					edit32bitsOfCode(*section,instr.address+4, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address+4, instrWord);
 					break;
 				}
 				case DataOperand::SYM:{
@@ -787,7 +805,7 @@ void Assembler::postProccessInstructions(){
 					instrWord |= (uint32_t) InstructionCode::LD_M << 24; 
 					instrWord |= (uint32_t)GPRType::PC << 16; // B=pc
 					//D will be edited
-					edit32bitsOfCode(*section,instr.address, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 
 					//gpr<=mem32[gpr]
 					// LD 0x92  A :gpr B:gpr
@@ -795,7 +813,7 @@ void Assembler::postProccessInstructions(){
 					instrWord |= (uint32_t) InstructionCode::LD_M << 24;
 					instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 20; // A=gpr
 					instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 16; // B=gpr
-					edit32bitsOfCode(*section,instr.address+4, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address+4, instrWord);
 					break;
 				}
 				case DataOperand::GPR:{
@@ -803,7 +821,7 @@ void Assembler::postProccessInstructions(){
 					// LD 0x91  B:op
 					instrWord |= (uint32_t) InstructionCode::LD << 24;
 					instrWord |= (uint32_t)op.gpr <<16; // B=op.gpr
-					edit32bitsOfCode(*section,instr.address, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 					break;
 				}
 				case DataOperand::REL_GPR:{
@@ -811,7 +829,7 @@ void Assembler::postProccessInstructions(){
 					// LD 0x92  B:op.gpr
 					instrWord |= (uint32_t) InstructionCode::LD_M << 24;
 					instrWord |= (uint32_t)op.gpr <<16; // B=op.gpr
-					edit32bitsOfCode(*section,instr.address, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 					break;
 				}
 				case DataOperand::REL_GPR_LIT:{
@@ -826,7 +844,7 @@ void Assembler::postProccessInstructions(){
 					instrWord |= (uint32_t) InstructionCode::LD_M << 24;
 					instrWord |= (uint32_t)op.gpr <<16; // B=op.gpr
 					instrWord |= op.literal & 0xFFF; // D=lit
-					edit32bitsOfCode(*section,instr.address, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 
 					/*addToLitPool(SymOrLit{.type=SymOrLit::LITERAL, .literal=op.literal }, section, instr.address);
 					// LD 0x92 B/C:pc D:later 
@@ -860,7 +878,7 @@ void Assembler::postProccessInstructions(){
 								instrWord |= (uint32_t) InstructionCode::LD_M << 24; 
 								instrWord |= (uint32_t)GPRType::PC << 16; // B=pc
 								//D will be edited
-								edit32bitsOfCode(*section,instr.address, instrWord);
+								edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 
 								//gpr<=mem32[gpr(sym) + op.gpr]
 								// LD 0x92  A :gpr B:gpr C:
@@ -870,7 +888,7 @@ void Assembler::postProccessInstructions(){
 								instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 16; // B=gpr
 								instrWord |= (uint32_t)op.gpr << 12; // C=op.gpr
 
-								edit32bitsOfCode(*section,instr.address+4, instrWord);
+								edit32bitsOfCodeBigEndian(*section,instr.address+4, instrWord);
 							}else{
 								std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> symbol still undefined at end of file\n";
 							}
@@ -892,7 +910,7 @@ void Assembler::postProccessInstructions(){
 							instrWord |= (uint32_t) InstructionCode::LD_M << 24; 
 							instrWord |= (uint32_t)GPRType::PC << 16; // B=pc
 							//D will be edited
-							edit32bitsOfCode(*section,instr.address, instrWord);
+							edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 
 							//gpr<=mem32[gpr(sym) + op.gpr]
 							// LD 0x92  A :gpr B:gpr C:
@@ -902,7 +920,7 @@ void Assembler::postProccessInstructions(){
 							instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 16; // B=gpr
 							instrWord |= (uint32_t)op.gpr << 12; // C=op.gpr
 
-							edit32bitsOfCode(*section,instr.address+4, instrWord);
+							edit32bitsOfCodeBigEndian(*section,instr.address+4, instrWord);
 						}else{
 							std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> local symbol still undefined at end of file\n";
 						}
@@ -943,14 +961,14 @@ void Assembler::postProccessInstructions(){
 						instrWord |= (uint32_t) InstructionCode::ST_M << 24;
 						instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
 						// D will be edited
-						edit32bitsOfCode(*section,instr.address, instrWord);
+						edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 						
 					}else{
 						// mem[op.lit]<=gpr
 						// ST 0x80  A:0 B:0 C:gpr D:lit
 						instrWord |= (uint32_t) InstructionCode::ST << 24;
 						instrWord |= op.literal & 0xFFF; 
-						edit32bitsOfCode(*section,instr.address, instrWord);
+						edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 					}
 					break;
 				}
@@ -962,7 +980,7 @@ void Assembler::postProccessInstructions(){
 					instrWord |= (uint32_t) InstructionCode::ST_M << 24;
 					instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
 					// D will be edited
-					edit32bitsOfCode(*section,instr.address, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 					break;
 				}
 				case DataOperand::GPR:{
@@ -973,7 +991,7 @@ void Assembler::postProccessInstructions(){
 					instrWord |= (uint32_t) InstructionCode::LD << 24;
 					instrWord |= (uint32_t)op.gpr <<20; // A=op.gpr
 					instrWord |= (uint32_t)instr.instruction->operands[0].gpr <<16; // B=gpr
-					edit32bitsOfCode(*section,instr.address, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 					break;
 				}
 				case DataOperand::REL_GPR:{
@@ -981,7 +999,7 @@ void Assembler::postProccessInstructions(){
 					// ST 0x80  A:op.gpr B:0  
 					instrWord |= (uint32_t) InstructionCode::ST << 24;
 					instrWord |= (uint32_t)op.gpr << 20; // A=op.gpr
-					edit32bitsOfCode(*section,instr.address, instrWord);
+					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 					break;
 				}
 				case DataOperand::REL_GPR_LIT:{
@@ -996,7 +1014,7 @@ void Assembler::postProccessInstructions(){
 						instrWord |= (uint32_t) InstructionCode::ST << 24;
 						instrWord |= (uint32_t)op.gpr << 20; // A=op.gpr
 						instrWord |= op.literal & 0xFFF; // D=lit
-						edit32bitsOfCode(*section,instr.address, instrWord);
+						edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 					}
 					break;
 				}
@@ -1022,7 +1040,7 @@ void Assembler::postProccessInstructions(){
 								instrWord |= (uint32_t)op.gpr << 20; // A=op.gpr
 								instrWord |= (uint32_t)GPRType::PC << 16; // B=pc
 								instrWord |= disp & 0xFFF; // D=disp
-								edit32bitsOfCode(*section,instr.address, instrWord);
+								edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 
 
 								/*addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, op.symbol }, section, instr.address);
@@ -1068,7 +1086,7 @@ void Assembler::postProccessInstructions(){
 							instrWord |= (uint32_t)op.gpr << 20; // A=op.gpr
 							instrWord |= (uint32_t)GPRType::PC << 16; // B=pc
 							instrWord |= disp & 0xFFF; // D=disp
-							edit32bitsOfCode(*section,instr.address, instrWord);
+							edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 
 
 							/*addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, op.symbol }, section, instr.address);
@@ -1119,7 +1137,7 @@ void Assembler::postProccessInstructions(){
 
 			instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
 
-			edit32bitsOfCode(*section,instr.address, instrWord);
+			edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 			break;
 		}
 		case Instruction::JMP:{
@@ -1139,7 +1157,7 @@ void Assembler::postProccessInstructions(){
 			
 			instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
 
-			edit32bitsOfCode(*section,instr.address, instrWord);
+			edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 			break;
 		}
 		case Instruction::BEQ:{
@@ -1160,7 +1178,7 @@ void Assembler::postProccessInstructions(){
 			instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
 			instrWord |= (uint32_t)instr.instruction->operands[0].gpr << 16; // B=gpr1
 			instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 12; // C=gpr2
-			edit32bitsOfCode(*section,instr.address, instrWord);
+			edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 			break;
 		}
 		case Instruction::BNE:{
@@ -1181,7 +1199,7 @@ void Assembler::postProccessInstructions(){
 			instrWord |= (uint32_t)GPRType::PC << 20; // A=pc
 			instrWord |= (uint32_t)instr.instruction->operands[0].gpr << 16; // B=gpr1
 			instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 12; // C=gpr2
-			edit32bitsOfCode(*section,instr.address, instrWord);
+			edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 			break;
 		}
 		case Instruction::BGT:{
@@ -1203,7 +1221,7 @@ void Assembler::postProccessInstructions(){
 				instrWord |= (uint32_t)instr.instruction->operands[0].gpr << 16; // B=gpr1
 				instrWord |= (uint32_t)instr.instruction->operands[1].gpr << 12; // C=gpr2
 
-				edit32bitsOfCode(*section, instr.address, instrWord);
+				edit32bitsOfCodeBigEndian(*section, instr.address, instrWord);
 				break;
 		}
 	

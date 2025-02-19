@@ -63,7 +63,7 @@ void Linker::addSectionPlacementReq(const std::string &sectionName, uint32_t add
 void Linker::generateOutputFiles()
 {
 	std::cout<<"Generating output files...\n";
-	std::ofstream outTxt(("./outputs/"+outputFilename+".txt").c_str(), std::ios::out);
+	std::ofstream outTxt(("./outputs/"+outputFilename+".hex").c_str(), std::ios::out);
 	uint32_t displayedAddress = 0;
 	uint32_t i = 0;
 	for(auto& code: initCode){
@@ -340,7 +340,7 @@ int main(int argc, char *argv[])
 				std::string argument = std::string(argv[i]).substr(7); // skip -place=
 				int pos = argument.find("@");
 				std::string sectionName = argument.substr(0, pos);
-				uint32_t address = std::stoul(argument.substr(pos+1));
+				uint32_t address = std::stoul(argument.substr(pos+1),NULL,16);
 				linker.addSectionPlacementReq(sectionName, address);
 
 			}else{

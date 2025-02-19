@@ -10,6 +10,9 @@
 // 0xFFFFFF00- 0xFFFFFFFF reserved
 #define PC 15
 #define SP 14
+#define STATUS 0
+#define HANDLER 1
+#define CAUSE 2
 
 class Emulator {
 public:
@@ -18,7 +21,6 @@ public:
 
 	void loadProgram(const std::vector<uint8_t>& program);
 	void run();
-	void reset();
 
 private:
 	/**Returns false in case of error in instruction, or in case of HALT instruction, ending the execution */
@@ -29,11 +31,14 @@ private:
 	// r15 - PC (address of next instruction)
 	// r14 - SP (stack pointer; pointing to last occupied address; stack grows downwards)
 	uint32_t programCounter; // adress of current instruction
-	uint32_t statusReg;
-	uint32_t handlerReg;
-	uint32_t causeReg;
+	uint32_t csr[3] = {0}; // status, handler, cause
+
 
 	void printRegisters();
+	void pushToStack32(uint32_t value);
+	uint32_t popFromStack32();
+	void memorySet32(uint32_t address, uint32_t value);
+	uint32_t memoryGet32(uint32_t address);
 };
 
 namespace InstructionCode{
@@ -72,7 +77,7 @@ namespace InstructionCode{
 		CSRRD=0x90,
 		CSRWR=0x94, INVALID
 	};
-}
+};
 
 
 #endif // EMULATOR_HPP

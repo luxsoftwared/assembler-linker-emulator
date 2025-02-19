@@ -1,7 +1,6 @@
 #include "../inc/Emulator.hpp"
 #include <iostream>
 #include <fstream>
-#include "Emulator.hpp"
 #include <iomanip>
 
 Emulator::Emulator(char* filename) : programCounter(START_ADDRESS) {
@@ -51,11 +50,8 @@ void Emulator::run() {
 	}
 }
 
-void Emulator::reset() {
-	programCounter = START_ADDRESS;
-	std::fill(std::begin(registers), std::end(registers), 0);
 
-}
+
 
 bool Emulator::executeInstruction(uint32_t address) {
 	//first byte, oc&mod
@@ -73,7 +69,7 @@ bool Emulator::executeInstruction(uint32_t address) {
 	//fourth byte, disp
 	byte = memory[address++];
 	uint8_t disp2 = byte;
-	uint16_t disp = (disp1 << 8) | disp2;
+	int16_t disp = (disp1 << 8) | disp2;
 	if(disp & 0x800){ // sign extend
 		disp |= 0xF000;
 	}
@@ -86,74 +82,86 @@ bool Emulator::executeInstruction(uint32_t address) {
 			return false;
 			break;
 		case InstructionCode::INT: 
-			
+			// push pc; push status; cause=4; status=mask; pc=handler;
+			// ide prvo push pc, iako tekst govori drugacije, jer mora pc na kraju da se restaurira 
+			pushToStack32(registers[PC]);
+			pushToStack32(csr[STATUS]);
+			csr[CAUSE] = 4;
+			csr[STATUS] &= ~0x1;
+			registers[PC] = csr[HANDLER];
 			break;
 		case InstructionCode::IRET: 
-			
+			// inst code 0x97; just pop status;
+			// pop pc is done with separate instruction;
+			csr[STATUS] = popFromStack32();
 			break;
-		case InstructionCode::CALL:
-			registers[SP] -= 4;
-			memory[registers[SP]] = registers[PC];
-			registers[PC] = registers[regA] + disp;
+		case InstructionCode::CALL: //relative jump
+			// push pc; pc<=pc+D;
+			pushToStack32(registers[PC]);
+			registers[PC] = registers[regA] + registers[regB] + disp;
 			break;
 		case InstructionCode::CALL_M:
+			// push pc; pc<=mem32[pc+D]; adr of jump is in lit pool
 			registers[SP] -= 4;
-			memory[registers[SP]] = registers[PC];
-			registers[PC] = memory[registers[regA] + disp];
+			memorySet32(registers[SP], registers[PC]); //memory[registers[SP]] = registers[PC];
+			//registers[PC] = memory[registers[regA] + registers[regB] + disp];
+			registers[PC] = memoryGet32(registers[regA] + registers[regB] + disp);
 			break;
-		case InstructionCode::RET:
-			registers[PC] = memory[registers[SP]];
-			registers[SP] += 4;
+		case InstructionCode::RET: // ovo ne postoji nigde, zamenio sam sa pop
+			//registers[PC] = memory[registers[SP]];
+			registers[PC] = popFromStack32();
 			break;
 		case InstructionCode::JMP:
 			registers[PC] = registers[regA] + disp;
 			break;
 		case InstructionCode::JMP_M:
-			registers[PC] = memory[registers[regA] + disp];
+			registers[PC] = memoryGet32(registers[regA]+disp);//memory[registers[regA] + disp];
 			break;
 		case InstructionCode::BEQ:
-			if (registers[regA] == registers[regB]) {
-				registers[PC] = registers[PC] + disp;
+			if (registers[regB] == registers[regC]) {
+				registers[PC] = registers[regA] + disp;
 			}
 			break;
 		case InstructionCode::BEQ_M:
-			if (registers[regA] == registers[regB]) {
-				registers[PC] = memory[registers[PC] + disp];
+			if (registers[regB] == registers[regC]) {
+				registers[PC] = memoryGet32(registers[regA]+disp);//memory[registers[regA] + disp];
 			}
 			break;
 		case InstructionCode::BNE:
-			if (registers[regA] != registers[regB]) {
-				registers[PC] = registers[PC] + disp;
+			if (registers[regB] != registers[regC]) {
+				registers[PC] = registers[regA] + disp;
 			}
 			break;
 		case InstructionCode::BNE_M:
-			if (registers[regA] != registers[regB]) {
-				registers[PC] = memory[registers[PC] + disp];
+			if (registers[regB] != registers[regC]) {
+				registers[PC] = memoryGet32(registers[regA]+disp);//memory[registers[regA] + disp];
 			}
 			break;
 		case InstructionCode::BGT:
-			if (registers[regA] > registers[regB]) {
-				registers[PC] = registers[PC] + disp;
+			if ((int32_t)registers[regB] > (int32_t)registers[regC]) {
+				registers[PC] = registers[regA] + disp;
 			}
 			break;
 		case InstructionCode::BGT_M:
-			if (registers[regA] > registers[regB]) {
-				registers[PC] = memory[registers[PC] + disp];
+			if ((int32_t)registers[regB] > (int32_t)registers[regC]) {
+				registers[PC] = memoryGet32(registers[regA]+disp);//memory[registers[regA] + disp];
 			}
 			break;
 		case InstructionCode::PUSH:
-			registers[SP] -= 4;
-			memory[registers[SP]] = registers[regC];
+			registers[regA] = registers[regA] + disp;
+			memorySet32(registers[regA], registers[regC]);
+
 			break;
 		case InstructionCode::POP:
-			registers[regA] = memory[registers[SP]];
-			registers[SP] += 4;
+			registers[regA] = memoryGet32(registers[regB]);
+			registers[regB] += disp;
 			break;
-		case InstructionCode::XCHG:
-			uint32_t temp = registers[regA];
-			registers[regA] = registers[regB];
-			registers[regB] = temp;
+		case InstructionCode::XCHG:{
+			uint32_t temp = registers[regB];
+			registers[regB] = registers[regC];
+			registers[regC] = temp;
 			break;
+		}
 		case InstructionCode::ADD:
 			registers[regA] = registers[regB] + registers[regC];
 			break;
@@ -185,22 +193,25 @@ bool Emulator::executeInstruction(uint32_t address) {
 			registers[regA] = registers[regB] >> registers[regC];
 			break;	
 		case InstructionCode::LD:
-			registers[regA] = memory[registers[regB] + disp];
+			registers[regA] = registers[regB] + disp;
 			break;
 		case InstructionCode::LD_M:
-			registers[regA] = memory[memory[registers[regB] + disp]];
+			registers[regA] = memoryGet32(registers[regB]+registers[regC]+disp); //memory[memory[registers[regB] + disp]];
 			break;
 		case InstructionCode::ST:	
-			memory[registers[regB] + disp] = registers[regA];
+			//memory[registers[regB] + disp] = registers[regA];
+			memorySet32(registers[regA]+registers[regB]+disp, registers[regC]);
 			break;
-		case InstructionCode::ST_M:
-			memory[memory[registers[regB] + disp]] = registers[regA];
+		case InstructionCode::ST_M:{
+			uint32_t addr = memoryGet32(registers[regA]+registers[regB]+disp);
+			memorySet32(addr, registers[regC]);
 			break;
+		}
 		case InstructionCode::CSRRD:	
-			registers[regA] = registers[regB];
+			registers[regA] = csr[regB];
 			break;
 		case InstructionCode::CSRWR:	
-			registers[regA] = registers[regB];
+			csr[regA] = registers[regB];
 			break;
 		default:
 			std::cerr << "Unknown opcode: " << std::hex << static_cast<int>(opcode) << std::endl;
@@ -220,6 +231,35 @@ void Emulator::printRegisters()
 		else
 			std::cout<<"\t";
 	}
+}
+
+void Emulator::pushToStack32(uint32_t value)
+{
+	registers[SP] -= 4;
+	memory[registers[SP]] = value & 0xFF;
+	memory[registers[SP]+1] = (value>>8) & 0xFF;
+	memory[registers[SP]+2] = (value>>16) & 0xFF;
+	memory[registers[SP]+3] = (value>>24) & 0xFF;
+}
+
+uint32_t Emulator::popFromStack32(){
+	uint32_t value = memory[registers[SP]] | (memory[registers[SP]+1]<<8) | (memory[registers[SP]+2]<<16) | (memory[registers[SP]+3]<<24);
+	registers[SP] += 4;
+	return value;
+}
+
+void Emulator::memorySet32(uint32_t address, uint32_t value)
+{
+	memory[address] = value & 0xFF;
+	memory[address+1] = (value>>8) & 0xFF;
+	memory[address+2] = (value>>16) & 0xFF;
+	memory[address+3] = (value>>24) & 0xFF;
+}
+
+uint32_t Emulator::memoryGet32(uint32_t address)
+{
+	uint32_t value = memory[address] | (memory[address+1]<<8) | (memory[address+2]<<16) | (memory[address+3]<<24);
+	return value;
 }
 
 int main(int argc, char *argv[])

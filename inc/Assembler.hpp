@@ -129,6 +129,7 @@ private:
 	bool setOutput = false;
 
 	void push32bitsToCode(uint32_t word);
+	void push32bitsToCodeBigEndian(uint32_t word);
 
 	//void processJMPoperand(Operand op);
 	uint32_t processJumpInstructions(Operand op, Section* s,uint32_t addresOfInstruction); //returns instruction
@@ -139,6 +140,7 @@ private:
 
 	void resolveSymbol(RelocTableElem& el);
 	void edit32bitsOfCode(Section& s,uint32_t adress, uint32_t word);
+	void edit32bitsOfCodeBigEndian(Section& s, uint32_t address, uint32_t word);
 	void addDispToInstruction(Section& s, uint32_t address, int32_t disp);
 	void postProccessInstructions();
 	uint32_t processDataOperand(DataOperand op, Section* sec, uint32_t address);

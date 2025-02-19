@@ -11,4 +11,10 @@ make linker
 ./build/linker -o in.snazzle_linkerOut -hex  ./outputs/in.snazzle_assemblyOut.o ./outputs/in.snazzle2_assemblyOut.o
 
 
+./build/asembler -o myTest1ASM myTest1
+./build/linker -place=my_code_main@0x40000000 -o myTest1LNK -hex ./outputs/myTest1ASM.o
+./build/emulator ./outputs/myTest1LNK.hex
+
+
+
 
