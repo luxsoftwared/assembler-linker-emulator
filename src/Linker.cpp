@@ -84,15 +84,16 @@ void Linker::generateOutputFiles()
 
 		outTxt<<std::setw(2)<<(uint32_t)code.second<<" ";
 		i++;
-		
-		
-		
 		if(i==8){
 			outTxt<<"\n";
 			i=0;
 		}
 
 		
+	}
+
+	for(;i<8;i++){
+		outTxt<<std::setw(2)<<"00 ";
 	}
 	outTxt.close();
 

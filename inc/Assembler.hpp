@@ -132,9 +132,10 @@ private:
 	void push32bitsToCodeBigEndian(uint32_t word);
 
 	//void processJMPoperand(Operand op);
-	uint32_t processJumpInstructions(Operand op, Section* s,uint32_t addresOfInstruction); //returns instruction
+	uint32_t processJumpInstructions(Operand op, Section* s,uint32_t addresOfInstruction, bool isFinalProcessing); //returns instruction
 	void addToLitPool(SymOrLit sol, Section* sec, uint32_t addressOfInstr);
 	void insertLitPool(); // insert lit pool to code
+	void postProccessInstructions(bool isFinalProcessing=false);
 	void endSection();
 	void endFile();
 
@@ -142,7 +143,7 @@ private:
 	void edit32bitsOfCode(Section& s,uint32_t adress, uint32_t word);
 	void edit32bitsOfCodeBigEndian(Section& s, uint32_t address, uint32_t word);
 	void addDispToInstruction(Section& s, uint32_t address, int32_t disp);
-	void postProccessInstructions();
+	//void postProccessInstructions();
 	uint32_t processDataOperand(DataOperand op, Section* sec, uint32_t address);
 };
 
@@ -184,6 +185,9 @@ enum class InstructionCode{
 	CSRWR=0x94, INVALID,
 	DIRECT_ADDRESSING=0x00,
 	INDIRECT_ADDRESSING=0x01,
+	ERROR = 0xFF,
+	INCOMPLETE = 0xFE
+
 };
 
 

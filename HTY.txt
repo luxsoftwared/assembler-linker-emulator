@@ -18,3 +18,23 @@ make linker
 
 
 
+-------Tests-----
+
+Tested and working:
+bgt %reg, %reg, sym 	//jump backwards, relative
+ld $imm, %reg 
+mul,sub %reg, %reg   
+
+To test:
+// jump absolute
+// operand with different types of addressing;
+// operand: $symbol(adresa) ok, symbol(vr. na adresi) ok, -||-literal, [%reg] (ind reg), (ind reg s pomerajem) ok
+// 
+
+
+------Bugs------
+- .word doesnt chech if its going to cross threshold of inserting litpool; to mitigate, cant have more than 12 initializators
+
+
+
+

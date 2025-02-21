@@ -44,7 +44,7 @@ void Assembler::edit32bitsOfCode(Section& s, uint32_t address, uint32_t word){ /
 	
 }
 
-void Assembler::edit32bitsOfCodeBigEndian(Section& s, uint32_t address, uint32_t word){ //little endian
+void Assembler::edit32bitsOfCodeBigEndian(Section& s, uint32_t address, uint32_t word){ 
 	s.code[address+3]= (word & 0xFF);
 	s.code[address+2]= ((word>>8) & 0xFF);
 	s.code[address+1]= ((word>>16) & 0xFF);
@@ -54,8 +54,8 @@ void Assembler::edit32bitsOfCodeBigEndian(Section& s, uint32_t address, uint32_t
 
 
 void Assembler::addDispToInstruction(Section& s, uint32_t address, int32_t disp){
-	s.code[address]= (disp & 0xFF);
-	s.code[address+1]= ((disp>>8) & 0xF);
+	s.code[address+3] = (disp & 0xFF);
+	s.code[address+2] |= ((disp>>8) & 0xF);
 }
 
 
@@ -288,6 +288,13 @@ void Assembler::processDirective(Directive* directive){
 				}
 
 				for(int i=0; i<directive->literal; i++){
+
+					if(currentSection!=NULL && currentSection->locationCounter / 2000 > currentSection->litPoolThresholdsReached ){
+						currentSection->litPoolThresholdsReached++;
+						std::cout<<"Inserting litpool inside skip\n";
+						insertLitPool();
+					}
+
 					currentSection->code.push_back(0x00);
 					LC++;
 					currentSection->locationCounter++;
@@ -296,6 +303,7 @@ void Assembler::processDirective(Directive* directive){
 			}
 			case Directive::END:{
 				//end section
+				postProccessInstructions(true); // here, final postprocessing is done, and mistakes are shown
 				endSection();
 				endFile();
 				std::cout<<"End!\n";
@@ -308,6 +316,9 @@ void Assembler::processDirective(Directive* directive){
 
 
 void Assembler::addToLitPool(SymOrLit sol, Section* section=NULL, uint32_t addressOfInstruction=-1){
+	std::cout<<"Adding to litpool: SymOrLit-";
+	sol.print();
+	std::cout<<", for instruction at:"<<addressOfInstruction<<"\n";
 	section = section==NULL ? currentSection : section;
 	addressOfInstruction = addressOfInstruction==(uint32_t)-1 ? section->locationCounter : addressOfInstruction;
 	if(sol.type==SymOrLit::SYMBOL){
@@ -345,7 +356,7 @@ void Assembler::addToLitPool(SymOrLit sol, Section* section=NULL, uint32_t addre
  * OCM=1 when gpr<=mem32[gpr+D]; (litpool)
  * D:disp to lit pool adr of operand
  */
-uint32_t Assembler::processJumpInstructions(Operand op,Section* section=NULL, uint32_t addressOfInstruction=-1){
+uint32_t Assembler::processJumpInstructions(Operand op,Section* section=NULL, uint32_t addressOfInstruction=-1, bool isFinalProcessing=false){
 // highest byte set to 0 when adressing is direct(pc rel), 1 when indirect(mem[pc rel])
 	section = section==NULL ? currentSection : section;
 	addressOfInstruction = addressOfInstruction==(uint32_t)-1 ? section->locationCounter : addressOfInstruction;
@@ -376,7 +387,7 @@ uint32_t Assembler::processJumpInstructions(Operand op,Section* section=NULL, ui
 					//defined global sym
 					// now acts as literal
 					if(el->sectionName==section->sectionName){
-						int32_t disp= el->value - addressOfInstruction;
+						int32_t disp= el->value - (addressOfInstruction + 4); // +4 bcs during execution pc is already incremented
 						if(disp>2047 || disp<-2048){
 							//disp bigger than 12 bits, has to go to litpool
 							instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
@@ -404,7 +415,7 @@ uint32_t Assembler::processJumpInstructions(Operand op,Section* section=NULL, ui
 		}else if(section->symbolTable.find(*(op.symbol))!=section->symbolTable.end()){
 			//defined local elem
 			SymbolTableElem* el = & (section->symbolTable[*(op.symbol)]);
-			int32_t disp= el->value - addressOfInstruction;
+			int32_t disp= el->value - (addressOfInstruction+4); // +4 bcs during execution pc is already incremented
 			if(disp>2047 || disp<-2048){
 				//disp bigger than 12 bits, has to go to litpool
 				instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
@@ -419,7 +430,14 @@ uint32_t Assembler::processJumpInstructions(Operand op,Section* section=NULL, ui
 			//not found anywhere
 			//instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
 			//addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, .symbol=op.symbol},section,addressOfInstruction);
-			std::cout<<"Error on address "<<addressOfInstruction<<": Jump to undefined symbol\n";
+			if( isFinalProcessing) {
+				std::cout<<"Error on address "<<addressOfInstruction<<": Jump to undefined symbol\n"; 
+				return instrWord |= (uint32_t)InstructionCode::ERROR<<24; // in case of error
+			}else {
+				//instrWord |= (uint32_t)InstructionCode::INCOMPLETE<<24; 
+				instrWord |= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24;
+				addToLitPool(SymOrLit{.type=SymOrLit::SYMBOL, .symbol=op.symbol},section,addressOfInstruction);
+			}
 		}
 	}
 	return instrWord;
@@ -687,9 +705,15 @@ void Assembler::processInstruction(Instruction* instr){
 }
 
 void Assembler::insertLitPool(){
+	postProccessInstructions(); // everything that can be resolved by relative adressing will be available, the rest have to use litpool
 	// insert jump over litpool
 	if(currentSection->litPool.size()==0){
 		return; // no litpool
+	}else{
+		//print litpool
+		for(LitPoolElem& el : currentSection->litPool){
+			std::cout<<"Litpool elem: "<<el.value<<" at address "<<el.addressOfInstruction<<"\n";
+		}
 	}
 	uint32_t dispAferLitPool = 4/*jmp*/ + currentSection->litPool.size() * 4;
 	if((int32_t)dispAferLitPool>2047){
@@ -708,14 +732,14 @@ void Assembler::insertLitPool(){
 	//lc<2047
 	// insert litpool
 	for(LitPoolElem& el : currentSection->litPool){
-		int32_t disp = currentSection->locationCounter - el.addressOfInstruction;
+		int32_t disp = currentSection->locationCounter - (el.addressOfInstruction+4);
 		if(disp>2047){
-			std::cout<<"Error: Litpool too far from instruction\n";
+			std::cout<<"Error: Litpool too far from instruction; Instr addr:"<<el.addressOfInstruction<<" LC:"<<currentSection->locationCounter<<"\n";
 			exit(1);
 		}
 		//edit D in instruction
-		currentSection->code[el.addressOfInstruction] = disp & 0xFF;
-		currentSection->code[el.addressOfInstruction+1] = (disp>>8) & 0xF;
+		currentSection->code[el.addressOfInstruction+3] = disp & 0xFF;
+		currentSection->code[el.addressOfInstruction+2] = (disp>>8) & 0xF;
 
 		if(el.resolved){
 			push32bitsToCode(el.value);
@@ -732,7 +756,8 @@ void Assembler::insertLitPool(){
 	currentSection->litPool.clear();
 }
 
-void Assembler::postProccessInstructions(){
+void Assembler::postProccessInstructions(bool isFinalProcessing){
+	std::vector<UnprocessedInstruction> leftUnprocessedInstructions;
 	for(UnprocessedInstruction& instr : currentSection->unprocessedInstructions){
 		Section* section = currentSection;
 		uint32_t instrWord=0;
@@ -890,7 +915,12 @@ void Assembler::postProccessInstructions(){
 
 								edit32bitsOfCodeBigEndian(*section,instr.address+4, instrWord);
 							}else{
-								std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> symbol still undefined at end of file\n";
+								if(isFinalProcessing) {
+									std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> symbol still undefined at end of file\n";
+								}else{
+									leftUnprocessedInstructions.push_back(instr);
+								}
+							
 							}
 						}else if(sym->type==SymbolType::EXTERN){
 							if(sym->value!=0 || sym->sectionName!=NULL)
@@ -922,10 +952,12 @@ void Assembler::postProccessInstructions(){
 
 							edit32bitsOfCodeBigEndian(*section,instr.address+4, instrWord);
 						}else{
-							std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> local symbol still undefined at end of file\n";
+							if(isFinalProcessing) std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> local symbol still undefined at the end of file\n";
+							else leftUnprocessedInstructions.push_back(instr);
 						}
 					}else{
-						std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> undefined symbol\n";
+						if(isFinalProcessing) std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> undefined symbol\n";
+						else leftUnprocessedInstructions.push_back(instr);
 					}
 
 					break;
@@ -1030,7 +1062,7 @@ void Assembler::postProccessInstructions(){
 									break;
 								}
 								// symbol defined in this section
-								int32_t disp = sym->value - instr.address;
+								int32_t disp = sym->value - (instr.address+4);
 								if(disp>2047 || disp<-2048){
 									std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": ST [reg+sym] -> symbol too far from instruction\n";
 									break;
@@ -1062,7 +1094,8 @@ void Assembler::postProccessInstructions(){
 
 								edit32bitsOfCode(*section,instr.address+4, instrWord);*/
 							}else{
-								std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> symbol still undefined at end of file\n";
+								if(isFinalProcessing)	std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> symbol still undefined at end of file\n";
+								else leftUnprocessedInstructions.push_back(instr);
 							}
 						}else if(sym->type==SymbolType::EXTERN){
 							if(sym->value!=0 || sym->sectionName!=NULL)
@@ -1076,7 +1109,7 @@ void Assembler::postProccessInstructions(){
 						SymbolTableElem* sym = & (section->symbolTable[*(op.symbol)]);
 						if(sym->value!=0 || sym->sectionName!=NULL){
 							//defined local sym
-							int32_t disp = sym->value - instr.address;
+							int32_t disp = sym->value - (instr.address+4);
 							if(disp>2047 || disp<-2048){
 								std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": ST [reg+sym] -> symbol too far from instruction\n";
 								break;
@@ -1107,10 +1140,12 @@ void Assembler::postProccessInstructions(){
 
 							edit32bitsOfCode(*section,instr.address+4, instrWord);*/
 						}else{
-							std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> local symbol still undefined at end of file\n";
+							if(isFinalProcessing)	std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> local symbol still undefined at end of file\n";
+							else leftUnprocessedInstructions.push_back(instr);
 						}
 					}else{
-						std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> undefined symbol\n";
+						if(isFinalProcessing)	std::cout<<"Error in section "<<*(section->sectionName)<<" at adress "<<instr.address<<": LD [reg+sym] -> undefined symbol\n";
+						else leftUnprocessedInstructions.push_back(instr);
 					}
 				}
 				default:
@@ -1125,7 +1160,12 @@ void Assembler::postProccessInstructions(){
 			// OC=21: push pc; pc<=mem32[gpr[A]+gpr[B]+D];
 			// A:pc, B:0, D:disp to lit pool adr of operand
 
-			instrWord = processJumpInstructions(instr.instruction->operands[0],section,instr.address); // sets D and adressing
+			instrWord = processJumpInstructions(instr.instruction->operands[0],section,instr.address, isFinalProcessing); // sets D and adressing
+			
+			if( instrWord>>24 == (uint32_t)InstructionCode::INCOMPLETE){
+				leftUnprocessedInstructions.push_back(instr);
+				break;
+			}
 
 			if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
 				instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
@@ -1145,7 +1185,12 @@ void Assembler::postProccessInstructions(){
 			// OC=30: pc<=gpr[A]+D; // pc rel
 			// OC=31: pc<=mem32[gpr[A]+D]; // pc rel from mem
 			// A:pc, D:disp to lit pool adr of operand
-			instrWord = processJumpInstructions(instr.instruction->operands[0], section, instr.address); // sets D and adressing
+			instrWord = processJumpInstructions(instr.instruction->operands[0], section, instr.address, isFinalProcessing); // sets D and adressing
+
+			if( instrWord>>24 == (uint32_t)InstructionCode::INCOMPLETE){
+				leftUnprocessedInstructions.push_back(instr);
+				break;
+			}
 
 			if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
 				instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
@@ -1166,7 +1211,13 @@ void Assembler::postProccessInstructions(){
 			// OCM=0x39 if (gpr[B] == gpr[C]) pc<=mem32[gpr[A]+D];
 			// A:pc, B:gpr1, C:gpr2, D:disp to lit pool adr of operand
 
-			instrWord = processJumpInstructions(instr.instruction->operands[2], section, instr.address); // sets D and adressing
+			instrWord = processJumpInstructions(instr.instruction->operands[2], section, instr.address, isFinalProcessing); // sets D and adressing
+			
+			if( instrWord>>24 == (uint32_t)InstructionCode::INCOMPLETE){
+				leftUnprocessedInstructions.push_back(instr);
+				break;
+			}
+			
 			if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
 				instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
 				instrWord |= (uint32_t)InstructionCode::BEQ_M<<24;
@@ -1187,7 +1238,13 @@ void Assembler::postProccessInstructions(){
 			// OCM=0x3A if (gpr[B] != gpr[C]) pc<=mem32[gpr[A]+D];
 			// A:pc, B:gpr1, C:gpr2, D:disp to lit pool adr of operand
 
-			instrWord = processJumpInstructions(instr.instruction->operands[2], section, instr.address); // sets D and adressing
+			instrWord = processJumpInstructions(instr.instruction->operands[2], section, instr.address, isFinalProcessing); // sets D and adressing
+			
+			if( instrWord>>24 == (uint32_t)InstructionCode::INCOMPLETE){
+				leftUnprocessedInstructions.push_back(instr);
+				break;
+			}
+			
 			if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
 				instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
 				instrWord |= (uint32_t)InstructionCode::BNE_M<<24;
@@ -1208,7 +1265,13 @@ void Assembler::postProccessInstructions(){
 				// OCM=0x39  if (gpr[B] signed> gpr[C]) pc<=mem32[gpr[A]+D];
 				// A:pc, B:gpr1, C:gpr2, D:disp to lit pool adr of operand
 
-				instrWord = processJumpInstructions(instr.instruction->operands[2], section, instr.address); // sets D and adressing
+				instrWord = processJumpInstructions(instr.instruction->operands[2], section, instr.address, isFinalProcessing); // sets D and adressing
+				
+				if( instrWord>>24 == (uint32_t)InstructionCode::INCOMPLETE){
+					leftUnprocessedInstructions.push_back(instr);
+					break;
+				}
+				
 				if( instrWord>>24 == (uint32_t)InstructionCode::INDIRECT_ADDRESSING){
 					instrWord ^= (uint32_t)InstructionCode::INDIRECT_ADDRESSING<<24; // clear adressing
 					instrWord |= (uint32_t)InstructionCode::BGT_M<<24;
@@ -1229,12 +1292,15 @@ void Assembler::postProccessInstructions(){
 			break;
 		}
 	}
+	
+
+	currentSection->unprocessedInstructions = leftUnprocessedInstructions;
 }
 
 
 void Assembler::endSection(){
 	if(currentSection!=NULL){
-		postProccessInstructions();
+		
 		insertLitPool();	
 
 		currentSection->endAddress=LC;
@@ -1253,8 +1319,6 @@ void Assembler::endFile(){
 		for(RelocTableElem& el : section.second.relocationTable){
 			//if(el.type==RelocTableElem::VALUE)
 				resolveSymbol(el);
-
-			
 		}
 		for(size_t i=0; i< section.second.relocationTable.size();i++){
 			if(section.second.relocationTable[i].type==RelocTableElem::INVALID){

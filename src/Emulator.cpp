@@ -22,6 +22,9 @@ Emulator::Emulator(char* filename) : programCounter(START_ADDRESS) {
 
 		address = std::stoul(addressStr, nullptr, 16);
 		for(int i=0; i<8; i++){
+			if(valuesStr.length() < i*3+2){
+				break;
+			}
 			uint8_t value = std::stoul(valuesStr.substr(i*3, 2), nullptr, 16);
 			memory[address++] = value;
 		}
@@ -40,6 +43,39 @@ Emulator::~Emulator() {
 }
 
 
+void printMemory(std::map<uint32_t, uint8_t> code){
+	std::ostream& outTxt = std::cout;
+	uint32_t displayedAddress = 0;
+	uint32_t i = 0;
+	outTxt<<"Memory dump:\n";
+	for(auto& code: code){
+		// print byte by byte
+		//outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<":"<<std::setw(2)<<(uint32_t)code.second<<"\n";
+		// print 8 bytes per line
+		if(i==0){
+			outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<": ";
+			displayedAddress = code.first;
+		}else if(code.first != displayedAddress+i){
+			for(;i<8;i++){
+				outTxt<<std::setw(2)<<"00 ";
+			}
+			outTxt<<"\n";
+			outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<": ";
+			displayedAddress = code.first;
+		}
+
+		outTxt<<std::setw(2)<<(uint32_t)code.second<<" ";
+		i++;
+
+		if(i==8){
+			outTxt<<"\n";
+			i=0;
+		}
+
+		
+	}
+}
+
 
 void Emulator::run() {
 	bool running = true;
@@ -48,7 +84,11 @@ void Emulator::run() {
 		registers[PC]+=4;
 		running = executeInstruction(programCounter);
 	}
+
+	//printMemory(memory);
 }
+
+
 
 
 
