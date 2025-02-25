@@ -48,6 +48,7 @@ void printMemory(std::map<uint32_t, uint8_t> code){
 	uint32_t displayedAddress = 0;
 	uint32_t i = 0;
 	outTxt<<"Memory dump:\n";
+	/*
 	for(auto& code: code){
 		// print byte by byte
 		//outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<":"<<std::setw(2)<<(uint32_t)code.second<<"\n";
@@ -71,9 +72,58 @@ void printMemory(std::map<uint32_t, uint8_t> code){
 			outTxt<<"\n";
 			i=0;
 		}
-
-		
 	}
+	*/
+
+	for(auto& code: code){
+		// print byte by byte
+		//outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<":"<<std::setw(2)<<(uint32_t)code.second<<"\n";
+		// print 8 bytes per line
+		if(code.second == 0 && i==0) continue;
+		// print address, fill missing spaces w zeros
+		if(i==0){
+			// set adr an levo, deljivo sa 8
+			displayedAddress = code.first - code.first%8;
+			outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<displayedAddress<<": ";
+			// fill with leading zeros, if needed
+			for(; i<code.first%8; i++){
+				outTxt<<std::setw(2)<<"00 ";
+			}			
+		}else if(code.first != displayedAddress+i){
+			for(;i<8 && code.first != displayedAddress+i;i++){
+				outTxt<<std::setw(2)<<"00 ";
+			}
+			if(code.first == displayedAddress+i){
+				break;
+			}
+			outTxt<<"\n";
+			i=0;
+			if(code.first%8 != 0){
+				displayedAddress = code.first - code.first%8;
+				// fill with leading zeros
+				for(; i<code.first%8; i++){
+					outTxt<<std::setw(2)<<"00 ";
+				}
+			}else{
+				displayedAddress = code.first;
+			}
+			
+			outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<displayedAddress<<": ";
+			displayedAddress = code.first;
+		}
+
+		outTxt<<std::setw(2)<<(uint32_t)code.second<<" ";
+		i++;
+		if(i==8){
+			outTxt<<"\n";
+			i=0;
+		}
+	}
+
+	for(;i>0 && i<8;i++){
+		outTxt<<std::setw(2)<<"00 ";
+	}
+
 }
 
 
@@ -85,7 +135,7 @@ void Emulator::run() {
 		running = executeInstruction(programCounter);
 	}
 
-	//printMemory(memory);
+	printMemory(memory);
 }
 
 

@@ -70,15 +70,36 @@ void Linker::generateOutputFiles()
 		// print byte by byte
 		//outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<":"<<std::setw(2)<<(uint32_t)code.second<<"\n";
 		// print 8 bytes per line
+		if(code.second == 0 && i==0) continue;
+		// print address, fill missing spaces w zeros
 		if(i==0){
-			outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<": ";
-			displayedAddress = code.first;
+			// set adr an levo, deljivo sa 8
+			displayedAddress = code.first - code.first%8;
+			outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<displayedAddress<<": ";
+			// fill with leading zeros, if needed
+			for(; i<code.first%8; i++){
+				outTxt<<std::setw(2)<<"00 ";
+			}			
 		}else if(code.first != displayedAddress+i){
-			for(;i<8;i++){
+			for(;i<8 && code.first != displayedAddress+i;i++){
 				outTxt<<std::setw(2)<<"00 ";
 			}
+			if(code.first == displayedAddress+i){
+				break;
+			}
 			outTxt<<"\n";
-			outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<code.first<<": ";
+			i=0;
+			if(code.first%8 != 0){
+				displayedAddress = code.first - code.first%8;
+				// fill with leading zeros
+				for(; i<code.first%8; i++){
+					outTxt<<std::setw(2)<<"00 ";
+				}
+			}else{
+				displayedAddress = code.first;
+			}
+			
+			outTxt<<std::hex<<std::setfill('0')<<std::setw(8)<<displayedAddress<<": ";
 			displayedAddress = code.first;
 		}
 
@@ -92,7 +113,7 @@ void Linker::generateOutputFiles()
 		
 	}
 
-	for(;i<8;i++){
+	for(;i>0 && i<8;i++){
 		outTxt<<std::setw(2)<<"00 ";
 	}
 	outTxt.close();
@@ -153,7 +174,7 @@ bool Linker::mergeSymbolTablesAndSections()
 						
 						// increase offset for reloc position by current size of the section
 						for(auto &relocEntry: obj.sections[sym.first].relocationTable){
-							relocEntry.offset += globalSymbolTable[sym.first].value; 
+							relocEntry.address += globalSymbolTable[sym.first].value; 
 						}
 						// merge relocation table
 						sections[sym.first].relocationTable.insert(sections[sym.first].relocationTable.end(), obj.sections[sym.first].relocationTable.begin(), obj.sections[sym.first].relocationTable.end());
@@ -277,13 +298,17 @@ bool Linker::resolveRelocations()
 			uint32_t relocAddress;
 			uint32_t relocValue ;
 			SymbolTableElem& sectionOfSymbolUsage = globalSymbolTable[*reloc.sectionName];
-			relocAddress = sectionOfSymbolUsage.value + reloc.offset;
+			relocAddress = sectionOfSymbolUsage.value + reloc.address;
 			SymbolTableElem sectionOfSymbolDefinition;
 			
 			if(*reloc.symbolName == *reloc.sectionName){
 				//symbol is a local symbol; defined in the same section where it is used 
 				sectionOfSymbolDefinition = sectionOfSymbolUsage;
-				relocValue = initCode[reloc.offset + sectionOfSymbolUsage.value]; // value of the symbol(relative to its section), written in code durring assembly
+				relocValue = initCode[relocAddress]; // value of the symbol(relative to its section), written in code durring assembly
+				relocValue |= (initCode[relocAddress+1] << 8);
+				relocValue |= (initCode[relocAddress+2] << 16);
+				relocValue |= (initCode[relocAddress+3] << 24);
+				relocValue += sectionOfSymbolDefinition.value;
 			}else{
 				//global symbol; 
 				if(globalSymbolTable.find(*reloc.symbolName) == globalSymbolTable.end() ){

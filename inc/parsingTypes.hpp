@@ -36,6 +36,14 @@ struct SymOrLit{
 		std::string* symbol;
 		int literal;
 	};
+
+	void print(){
+		if(type==SYMBOL){
+			std::cout<<"Symbol: "<<*symbol<<"\n";
+		}else{
+			std::cout<<"Literal: "<<literal<<"\n";
+		}
+	}
 };
 
 struct DataOperand{

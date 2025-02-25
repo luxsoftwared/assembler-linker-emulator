@@ -149,67 +149,81 @@ class RelocTableElem : public Serializable {
 public:
 	enum RelocType{
 		VALUE,
-		JMP_OP, // in instr: pc rel to addres or from lit pool
-		PCREL,
-		DATA_OP, 
+		RELATIVE, // pc rel access to symbol
 		INVALID
-			};
-	uint32_t offset;// LC, or where elem should be put (relastive to section start)
+		};
+
+	//static long next_id;
+	//long int id;
+	/* address of usage(relative to section start); 
+	where elem should be put , or
+	where to put disp that refers to this symbol (addr+4+disp=symbol)
+	
+	*/
+	uint32_t address;
 	std::string* sectionName; // section where elem should be put
 
-	RelocType type; //?
 	std::string* symbolName;
+	RelocType type;
 
-	RelocTableElem(uint32_t off, std::string* secName, RelocType t, std::string* symName){
-		offset=off;
+	RelocTableElem(uint32_t off, std::string* secName, std::string* symName){
+		type=RelocType::VALUE;
+		address=off;
 		sectionName=secName;
-		type=t;
+		//type=t;
 		symbolName=symName;
+		//id = next_id++;
+	};
+
+	RelocTableElem(RelocType _type, uint32_t off, std::string* secName, std::string* symName){
+		type=_type;
+		address=off;
+		sectionName=secName;
+		//type=t;
+		symbolName=symName;
+		//id = next_id++;
 	};
 
 	RelocTableElem(){
-		offset=0;
+		address=0;
 		sectionName=NULL;
-		type=RelocType::INVALID;
+		//type=RelocType::INVALID;
 		symbolName=NULL;
+		//id = next_id++;
 	}
 
 	static void printRelocTableHeader(std::ostream& out = std::cout){
 		out<<std::setw(15)<<std::left<<"Symbol name";
 		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<"Offset";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<"Type";
+		out<<std::setw(15)<<std::left<<"Address (dest)";
 		out<<std::setw(1)<<"|";
 		out<<std::setw(15)<<std::left<<"Section name";
 		out<<std::setw(1)<<"|";
+		//out<<std::setw(10)<<std::left<<"Type";
+		//out<<std::setw(1)<<"|";
 		out<<"\n";
 		out<<"-----------------------------------------------------\n";
 	}
 
 	void printRelocTableElem(std::ostream& out = std::cout){
-		out<<std::setw(15)<<std::left<<*symbolName;
+		out<<std::setw(15)<<std::left<< (symbolName ? (*symbolName) : "NULL" );
 		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<offset;
+		out<<std::setw(15)<<std::left<<address;
+		out<<std::setw(1)<<"|";
+		out<<std::setw(15)<<std::left<< ( sectionName ? *sectionName : "NULL" );
 		out<<std::setw(1)<<"|";
 		switch(type){
 			case RelocType::VALUE:{
 				out<<std::setw(10)<<std::left<<"VALUE";
 				break;
 			}
-			case RelocType::JMP_OP:{
-				out<<std::setw(10)<<std::left<<"JMP_OP";
-				break;
-			}
-			case RelocType::DATA_OP:{
-				out<<std::setw(10)<<std::left<<"DATA_OP";
+			case RelocType::RELATIVE:{
+				out<<std::setw(10)<<std::left<<"RELATIVE";
 				break;
 			}
 			default:
 				out<<std::setw(10)<<std::left<<"Error in printRelocTableElem\n";
 		}
-		out<<std::setw(1)<<"|";
-		out<<std::setw(15)<<std::left<<*sectionName;
 		out<<std::setw(1)<<"|";
 		out<<"\n";
 	}
@@ -220,7 +234,7 @@ public:
 		uint32_t len = symbolName->length();
 		out.write((char*)&len,sizeof(len));
 		out.write(symbolName->c_str(),len);
-		out.write((char*)&offset,sizeof(offset));
+		out.write((char*)&address,sizeof(address));
 		len = sectionName->length();
 		out.write((char*)&len,sizeof(len));
 		out.write(sectionName->c_str(),len);
@@ -234,7 +248,7 @@ public:
 		in.read(buff,len);
 		symbolName = new std::string(buff,len);
 		delete[] buff;
-		in.read((char*)&offset,sizeof(offset));
+		in.read((char*)&address,sizeof(address));
 		in.read((char*)&len,sizeof(len));
 		buff = new char[len];
 		in.read(buff,len);
@@ -245,44 +259,65 @@ public:
 };
 
 struct LitPoolElem{ // addressed pc rel from instruction
-	int32_t value;
-	uint32_t addressOfInstruction;
-	bool resolved; // if false, reloc
-	RelocTableElem* reloc;// 
+	enum LitPoolElemType{
+		VALUE,
+		SYMBOL
+	};
+	LitPoolElemType type;
+	union{
+		int32_t value;
+		std::string* symbolName;
+	};
+	uint32_t addressOfInstruction; // that uses this element
+	//bool resolved; // if false, reloc
+	//RelocTableElem* reloc;// 
+	//long idOfRelocTableElem = -1;
 
-	LitPoolElem(int32_t val,uint32_t adr, bool res=true, RelocTableElem* rel=NULL){
+	LitPoolElem(int32_t val,uint32_t adr/*, bool res=true, RelocTableElem* rel=NULL, long id=-1*/){
+		type=VALUE;
 		value=val;
 		addressOfInstruction=adr;
-		resolved=res;
-		reloc=rel;
+		//resolved=res;
+		//reloc=rel;
+		//idOfRelocTableElem = id;
+	}
+
+	LitPoolElem(std::string* sym,uint32_t adr){
+		type=SYMBOL;
+		symbolName=sym;
+		addressOfInstruction=adr;
 	}
 
 	static void printLitPoolHeader(std::ostream& out = std::cout){
-		out<<std::setw(10)<<std::left<<"Value";
+		out<<std::setw(10)<<std::left<<"Instr Addr";
 		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<"I Address";
+		out<<std::setw(10)<<std::left<<"Value/Sym name";
 		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<"Resolved";
-		out<<std::setw(1)<<"|";
-		out<<std::setw(15)<<std::left<<"Reloc Sym name";
-		out<<std::setw(1)<<"|";
+		
+		//out<<std::setw(10)<<std::left<<"Resolved";
+		//out<<std::setw(1)<<"|";
+		//out<<std::setw(15)<<std::left<<"Reloc Sym name";
+		//out<<std::setw(1)<<"|";
 		out<<"\n";
 		out<<"-------------------------------------------------------------\n";
 	}
 
 	void printLitPoolElem(std::ostream& out = std::cout){
-		out<<std::setw(10)<<std::left<<value;
-		out<<std::setw(1)<<"|";
 		out<<std::setw(10)<<std::left<<addressOfInstruction;
 		out<<std::setw(1)<<"|";
-		out<<std::setw(10)<<std::left<<(resolved?"YES":"NOT");
+		if(type==VALUE)
+			out<<std::setw(10)<<std::left<<value;
+		else
+			out<<std::setw(10)<<std::left<<*symbolName;
 		out<<std::setw(1)<<"|";
-		if(resolved || reloc==NULL){
+		//out<<std::setw(10)<<std::left<<(resolved?"YES":"NOT");
+		//out<<std::setw(1)<<"|";
+		/*if(resolved || reloc==NULL){
 			out<<std::setw(15)<<std::left<<"";
 		}else{
 			out<<std::setw(15)<<std::left<<*(reloc->symbolName);
-		}
-		out<<std::setw(1)<<"|";
+		}*/
+		//out<<std::setw(1)<<"|";
 		out<<"\n";
 	}
 };
