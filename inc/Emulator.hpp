@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 #include <map>
+#include <iostream>
 
 #define START_ADDRESS 0x40000000
 #define STACK_START_ADDRESS 0xFFFFFF00
@@ -19,7 +20,7 @@ public:
 	Emulator(char* filename);
 	~Emulator();
 
-	void loadProgram(const std::vector<uint8_t>& program);
+	//void loadProgram(const std::vector<uint8_t>& program);
 	void run();
 
 private:
@@ -34,7 +35,8 @@ private:
 	uint32_t csr[3] = {0}; // status, handler, cause
 
 
-	void printRegisters();
+	void printRegisters(std::ostream& outTxt = std::cerr);
+	void printSystemRegisters(std::ostream &outTxt = std::cerr);
 	void pushToStack32(uint32_t value);
 	uint32_t popFromStack32();
 	void memorySet32(uint32_t address, uint32_t value);

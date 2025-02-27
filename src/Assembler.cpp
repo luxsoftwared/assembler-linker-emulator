@@ -81,7 +81,7 @@ void Assembler::processLine(Line* line){
 	
 	if(currentSection!=NULL && currentSection->locationCounter / 2000 > currentSection->litPoolThresholdsReached ){
 		currentSection->litPoolThresholdsReached++;
-		insertLitPool();
+		insertLitPool(); //TODO check if this works?
 	}
 	
 	// process directive
@@ -687,24 +687,24 @@ void Assembler::processInstruction(Instruction* instr){
 						break;
 				}
 				break;
-			case Instruction::ST:
+			case Instruction::ST: // TODO trebaju li dve instr?
 				currentSection->unprocessedInstructions.push_back({instr, currentSection->locationCounter});
 				push32bitsToCodeBigEndian(instrWord);
 				break;
 			case Instruction::CSRRD:
 				// csrrd csr, gpr -> gpr<=csr;
 				// OC=0x90 gpr[A]<=csr[B];
-				// A:gpr, B:csr
+				// A:gpr(op1), B:csr(op0)
 				instrWord |= (uint32_t)InstructionCode::CSRRD<<24;
-				instrWord |= (uint32_t)instr->operands[0].gpr << 20; // A=gpr
-				instrWord |= (uint32_t)instr->operands[1].csr << 16; // B=csr
+				instrWord |= (uint32_t)instr->operands[1].gpr << 20; // A=gpr
+				instrWord |= (uint32_t)instr->operands[0].csr << 16; // B=csr
 				push32bitsToCodeBigEndian(instrWord);
 
 				break;
 			case Instruction::CSRWR:
 				// csrwr gpr, csr -> csr<=gpr;
 				// OC=0x94 csr[A]<=gpr[B];
-				// A:csr, B:gpr
+				// A:csr(op0), B:gpr(op1)
 				instrWord |= (uint32_t)InstructionCode::CSRWR<<24;
 				instrWord |= (uint32_t)instr->operands[1].csr << 20; // A=csr
 				instrWord |= (uint32_t)instr->operands[0].gpr << 16; // B=gpr
@@ -793,6 +793,7 @@ void Assembler::postProccessInstructions(bool isFinalProcessing){
 
 			switch(op.type){
 				case DataOperand::IMM_LIT:
+					std::cout<< "ld sa imm lit: "<<op.literal<<"\n";
 					if(op.literal>2047 || op.literal<-2048){
 						//litpool
 						addToLitPool(SymOrLit{.type=SymOrLit::LITERAL, .literal=op.literal}, section, instr.address);
@@ -1496,7 +1497,7 @@ void Assembler::printLitPools(){
 		for(LitPoolElem el : section.second.litPool){
 			el.printLitPoolElem(outTxt);
 		}
-		outTxt<<"Old lit pools for section "<<section.first<<":\n";
+		//outTxt<<"Old lit pools for section "<<section.first<<":\n";
 		/*for(auto pool : section.second.oldLitPools){
 			LitPoolElem::printLitPoolHeader(outTxt);
 			for(LitPoolElem el : pool){
@@ -1568,7 +1569,7 @@ int main(int argc, char *argv[])
 
 	assembler.closeOutputFile(assembler.getOutTxt());
 
-	std::cout<<"Before serialization\n";
+	
 
 	ObjectFile(assembler).serialize(assembler.getOutBin());
 	//assembler.serialize(assembler.getOutBin());

@@ -339,6 +339,42 @@ struct Line{
 						break;
 					}
 					case Operand::DATA_OPERAND:
+						switch(op.dataOperand.type){
+							case DataOperand::LIT:{
+								std::cout<<"lit "<<op.dataOperand.literal<<" ";
+								break;
+							}
+							case DataOperand::SYM:{
+								std::cout<<"sym "<<*(op.dataOperand.symbol)<<" ";
+								break;
+							}
+							case DataOperand::IMM_LIT:{
+								std::cout<<"$lit "<<op.dataOperand.literal<<" ";
+								break;
+							}
+							case DataOperand::IMM_SYM:{
+								std::cout<<"$sym "<<*(op.dataOperand.symbol)<<" ";
+								break;
+							}
+							case DataOperand::GPR:{
+								std::cout<<"gpr "<<(int)op.dataOperand.gpr<<" ";
+								break;
+							}
+							case DataOperand::REL_GPR:{
+								std::cout<<"rel_gpr "<<(int)op.dataOperand.gpr<<" ";
+								break;
+							}
+							case DataOperand::REL_GPR_LIT:{
+								std::cout<<"rel_gpr_lit "<<(int)op.dataOperand.gpr<<" "<<op.dataOperand.literal<<" ";
+								break;
+							}
+							case DataOperand::REL_GPR_SYM:{
+								std::cout<<"rel_gpr_sym "<<(int)op.dataOperand.gpr<<" "<<*(op.dataOperand.symbol)<<" ";
+								break;
+							}
+							default:
+								std::cout<<"Error in data operand type\n";
+						}
 						break;
 					default:
 						break;

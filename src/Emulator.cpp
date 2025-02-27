@@ -1,5 +1,4 @@
 #include "../inc/Emulator.hpp"
-#include <iostream>
 #include <fstream>
 #include <iomanip>
 
@@ -45,7 +44,7 @@ Emulator::~Emulator() {
 
 
 void printMemory(std::map<uint32_t, uint8_t> code){
-	std::ostream& outTxt = std::cout;
+	std::ostream& outTxt = std::cerr;
 	uint32_t displayedAddress = 0;
 	uint32_t i = 0;
 	outTxt<<"Memory dump:\n";
@@ -134,7 +133,6 @@ void Emulator::run() {
 		programCounter = registers[PC];
 		registers[PC]+=4;
 		running = executeInstruction(programCounter);
-		std::cout<<"Executed intruction at: "<<std::hex<<programCounter<<"\n";
 	}
 
 	printMemory(memory);
@@ -146,6 +144,8 @@ void Emulator::run() {
 
 
 bool Emulator::executeInstruction(uint32_t address) {
+	std::cerr<<"Executing intruction at: "<<std::hex<<programCounter<<"\n";
+
 	//first byte, oc&mod
 	uint8_t byte = memory[address++];
 	uint8_t opcode = (byte & 0xF0) >> 4;
@@ -166,11 +166,13 @@ bool Emulator::executeInstruction(uint32_t address) {
 		disp |= 0xF000;
 	}
 
+	std::cerr<<"opcode&mod: "<<std::hex<< (opcode<<4 | mod) <<" regA: "<<(int)regA<<" regB: "<<(int)regB<<" regC: "<<(int)regC<<" disp: "<<disp<<"\n";
+
 
 	switch (opcode<<4 | mod) {
 		case InstructionCode::HALT: 
 			std::cout<<"Emulated processor executed halt instruction\n";
-			printRegisters();
+			printRegisters(std::cout);
 			return false;
 			break;
 		case InstructionCode::INT: 
@@ -310,19 +312,28 @@ bool Emulator::executeInstruction(uint32_t address) {
 			return false;
 			break;
 	}
+	printRegisters();
+	printSystemRegisters();
 	return true;
 }
 
-void Emulator::printRegisters()
+void Emulator::printRegisters(std::ostream& outTxt)
 {
-	std::cout<<"Emulated processor state: \n";
+	outTxt<<"Emulated processor state: \n";
 	for(int i=0; i<16; i++){
-		std::cout<<"r"<<i<<"=0x"<< std::setw(8) << std::hex <<registers[i];
+		outTxt<<"r"<<i<<"=0x"<< std::setw(8) << std::hex <<registers[i];
 		if(i%4 == 3)
-			std::cout<<"\n";
+			outTxt<<"\n";
 		else
-			std::cout<<"\t";
+			outTxt<<"\t";
 	}
+}
+
+void Emulator::printSystemRegisters(std::ostream& outTxt){
+	outTxt<<"Emulated processor system registers: \n";
+	outTxt<<"status=0x"<<std::setw(8)<<std::hex<<csr[0]<<"\n";
+	outTxt<<"handler=0x"<<std::setw(8)<<std::hex<<csr[1]<<"\n";
+	outTxt<<"cause=0x"<<std::setw(8)<<std::hex<<csr[2]<<"\n";
 }
 
 void Emulator::pushToStack32(uint32_t value)
@@ -356,14 +367,24 @@ uint32_t Emulator::memoryGet32(uint32_t address)
 
 int main(int argc, char *argv[])
 {
-	
+	//std::ofstream debugLog("emulator_debug_log.txt",std::ios_base::app);
+	std::ofstream debugLog("emulator_debug_log.txt");
+
+      // Redirect cerr to the file
+    std::cerr.rdbuf(debugLog.rdbuf());
+    std::cerr << "\n-----------------Emulator--------------------\n";
+    
+    
 	if(argc != 2 ){
 		std::cerr<<"ERROR: invalid number of arguments\n";
 		std::cerr<<"Usage: "<<argv[0]<<" <filename>\n";
 		std::cerr<<"<filename> - path to the file with the program in hex format\n";
 		return -1;
 	}
+	std::cerr << "File: " << argv[1] << std::endl;
 	Emulator emulator(argv[1]);
 	emulator.run();
+	
+	debugLog.close();
 	return 0;
 }
