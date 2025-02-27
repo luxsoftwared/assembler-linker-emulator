@@ -158,52 +158,81 @@ bool Linker::mergeSymbolTablesAndSections()
 	std::cout<<"Merging symbol tables and sections...\n";
 	for( auto &obj : objectFiles)
 	{
-		for( auto &sym : obj.getSymbolTable() )
+		std::vector<SymbolTableElem> unprocessedSymbols;
+		std::vector<SymbolTableElem> unprocessedSections;
+		for(auto& sym: obj.getSymbolTable()){
+			if(sym.second.type == SymbolType::SECTION)
+				unprocessedSections.push_back(sym.second);
+			else
+				unprocessedSymbols.push_back(sym.second);
+		}
+		std::cerr<<"Processing sections...\n";
+		// process sections first
+		for(auto &sym : unprocessedSections)
 		{
-			if(globalSymbolTable.find(sym.first) != globalSymbolTable.end())
+			if(globalSymbolTable.find(*(sym.symbolName)) != globalSymbolTable.end())
 			{
 				// symbol already exists
-				switch(globalSymbolTable[sym.first].type) {
-					case SymbolType::SECTION:{
-						if(sym.second.type != SymbolType::SECTION){
-							std::cerr<<"ERROR: multiple symbols with same name(section name overlaps with var name): "+ sym.first+"\n";
-							return false;
-						}
+				if(globalSymbolTable[*(sym.symbolName)].type != SymbolType::SECTION){
+					std::cerr<<"ERROR: multiple symbols with same name(section name overlaps with var name): "+ *(sym.symbolName)+"\n";
+					return false;
+				}
+				std::cerr<<"Merging section "<<*(sym.symbolName)<<"\n";
+				// merge sections
 
-						// merge sections
-						
-						// increase offset for reloc position by current size of the section
-						for(auto &relocEntry: obj.sections[sym.first].relocationTable){
-							relocEntry.address += globalSymbolTable[sym.first].value; 
-						}
-						// merge relocation table
-						sections[sym.first].relocationTable.insert(sections[sym.first].relocationTable.end(), obj.sections[sym.first].relocationTable.begin(), obj.sections[sym.first].relocationTable.end());
-
-						// merge code
-						sections[sym.first].code.insert(sections[sym.first].code.end(), obj.sections[sym.first].code.begin(), obj.sections[sym.first].code.end());
-
-						// update size
-						globalSymbolTable[sym.first].size += sym.second.size;
-
-						break;
+				// increase symbol values for all symbols from this section, in this obj file
+				for(auto& unprocSym:unprocessedSymbols){
+					if( unprocSym.sectionName!=0 && *(unprocSym.sectionName) == *(sym.symbolName)){
+						unprocSym.value += globalSymbolTable[*(sym.symbolName)].size;
 					}
+				}
+				
+				// increase offset for reloc position by current size of the section
+				for(auto &relocEntry: obj.sections[*(sym.symbolName)].relocationTable){
+					relocEntry.address += globalSymbolTable[*(sym.symbolName)].size; 
+				}
+				// merge relocation table
+				sections[*(sym.symbolName)].relocationTable.insert(sections[*(sym.symbolName)].relocationTable.end(), obj.sections[*(sym.symbolName)].relocationTable.begin(), obj.sections[*(sym.symbolName)].relocationTable.end());
+
+				// merge code
+				sections[*(sym.symbolName)].code.insert(sections[*(sym.symbolName)].code.end(), obj.sections[*(sym.symbolName)].code.begin(), obj.sections[*(sym.symbolName)].code.end());
+
+				// update size
+				globalSymbolTable[*(sym.symbolName)].size += sym.size;
+
+			}else{
+				// symbol does not exist
+				globalSymbolTable[*(sym.symbolName)] = sym;
+				// add section to sections
+				sections[*(sym.symbolName)] = obj.sections[*(sym.symbolName)];
+			}
+		}
+
+	std::cerr<<"Processing symbols...\n";
+		// process other symbols
+		for( auto &sym : unprocessedSymbols )
+		{
+			if(globalSymbolTable.find(*(sym.symbolName)) != globalSymbolTable.end())
+			{
+				// symbol already exists
+				switch(globalSymbolTable[*(sym.symbolName)].type) {
 					case SymbolType::GLOBAL:{
-						if(sym.second.type != SymbolType::EXTERN){
-							std::cerr<<"ERROR: multiple global symbols with same name: "+ sym.first+"\n";
+						if(sym.type != SymbolType::EXTERN){
+							std::cerr<<"ERROR: multiple global symbols with same name: "+ *(sym.symbolName)+"\n";
 							return false;
 						}
 						// 
 						break;
 					}
 					case SymbolType::EXTERN:{
-						if(sym.second.type == SymbolType::SECTION){
-							std::cerr<<"ERROR: multiple symbols with same name(section name overlaps with var name): "+ sym.first+"\n";
+						if(sym.type == SymbolType::SECTION){
+							std::cerr<<"ERROR: multiple symbols with same name(section name overlaps with var name): "+ *(sym.symbolName)+"\n";
 							return false;
-						}else if(sym.second.type == SymbolType::GLOBAL ){
+						}else if(sym.type == SymbolType::GLOBAL ){
 							// turn him to GLOBAL and set his value and section
-							globalSymbolTable[sym.first].type = SymbolType::GLOBAL;
-							globalSymbolTable[sym.first].value = sym.second.value;
-							globalSymbolTable[sym.first].sectionName = sym.second.sectionName;
+							globalSymbolTable[*(sym.symbolName)].type = SymbolType::GLOBAL;
+							globalSymbolTable[*(sym.symbolName)].value = sym.value;
+							globalSymbolTable[*(sym.symbolName)].sectionName = sym.sectionName;
 						}
 						// if both are extern nothing happends
 
@@ -212,15 +241,11 @@ bool Linker::mergeSymbolTablesAndSections()
 					default:
 						std::cerr<<"ERROR switch(globalSymbolTable[sym.first].type) in mergeSymbolTables\n";
 				}
-				
-				
+
 			}else{
 				// symbol does not exist
-				globalSymbolTable[sym.first] = sym.second;
-				if(sym.second.type == SymbolType::SECTION){
-					// add section to sections
-					sections[sym.first] = obj.sections[sym.first];
-				}
+				globalSymbolTable[*(sym.symbolName)] = sym;
+
 			}
 			
 		}
@@ -296,6 +321,9 @@ bool Linker::resolveRelocations()
 			if(reloc.type != RelocTableElem::RelocType::VALUE){ //relativ will already be resolved
 				std::cerr<<"ERROR: relocation type different from VALUE (absolute), not implemented\n";
 				return false;
+				// resolve relative reloc (for store)
+				// symbol is not local(that will already be reoslved during assembly)
+				
 			}
 			
 			uint32_t relocAddress;

@@ -51,6 +51,7 @@ public:
 	std::map<std::string, SymbolTableElem> getSymbolTable() const { return symbolTable; }
 	void print(){
 		std::cout<<"Symbol table:\n";
+		SymbolTableElem::printSymbolTableHeader();
 		for(auto& el : symbolTable){
 			el.second.printSymbolTableElem();
 		}

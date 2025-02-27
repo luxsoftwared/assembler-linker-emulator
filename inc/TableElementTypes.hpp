@@ -31,11 +31,11 @@ public:
 	static uint32_t idCounter;
 	uint32_t id;
 	std::string* symbolName;
-	uint32_t value;
+	uint32_t value;  // value of symbol, if it is section, value is start address of section
 	SymbolType type;
 	union{
-		std::string* sectionName;
-		uint32_t size;
+		std::string* sectionName; // name of section where symbol is defined
+		uint32_t size; // size of section
 	};
 
 	void printSymbolTableElem(std::ostream& out = std::cout){
