@@ -487,7 +487,8 @@ void Assembler::processInstruction(Instruction* instr){
 				instrWord |= (uint32_t)GPRType::SP << 16; // B=sp
 				instrWord |= 4; // D=4
 				push32bitsToCodeBigEndian(instrWord);
-
+				
+				instrWord=0;
 				// pop pc --> pc<=mem32[sp]; sp<=sp+4;
 				//OC=1001 M=0011: gpr[A]<=mem32[gpr[B]]; gpr[B]<=gpr[B]+D;
 				// A:pc, B:sp, D:4
@@ -829,6 +830,7 @@ void Assembler::postProccessInstructions(bool isFinalProcessing){
 					//D will be edited
 					edit32bitsOfCodeBigEndian(*section,instr.address, instrWord);
 
+		
 					//gpr<=mem32[gpr]
 					// LD 0x92  A :gpr B:gpr
 					instrWord = 0;
@@ -1349,7 +1351,7 @@ void Assembler::endFile(){
 		std::vector<int> indexesToErase;
 
 		for(size_t i=0; i< section.second.relocationTable.size();i++){
-			if(section.second.relocationTable[i].type==RelocTableElem::INVALID)
+			if(section.second.relocationTable[i].type==RelocTableElem::INVALID) // only relative will be deleted, bcs they are comepletely resolved here (for st instr)
 				indexesToErase.push_back(i);
 		}
 
@@ -1513,7 +1515,7 @@ void Assembler::printDebug(){
 
 void Assembler::setOutputFiles(std::string outputFilename){
 	outTxt.open((outputFilename+".txt").c_str(), std::ios::out);
-	outBin.open((outputFilename+".o").c_str(), std::ios::out | std::ios::binary);
+	outBin.open((outputFilename+"").c_str(), std::ios::out | std::ios::binary);
 	std::cout<<"napravljeni output fajlovi";
 }
 
@@ -1522,7 +1524,7 @@ void Assembler::setOutputFiles(std::string outputFilename){
 int main(int argc, char *argv[])
 {
 	Assembler assembler;
-	std::string inputFilename="./tests/";
+	std::string inputFilename="";
 	std::string outputFilename="./outputs/";
 	if(argc == 2){
 		inputFilename+=argv[1];

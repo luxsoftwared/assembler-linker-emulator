@@ -1,6 +1,6 @@
-ASSEMBLER=assembler
-LINKER=linker
-EMULATOR=emulator
+ASSEMBLER=../../build/assembler
+LINKER=../../build/linker
+EMULATOR=../../build/emulator
 
 ${ASSEMBLER} -o main.o main.s
 ${ASSEMBLER} -o math.o math.s

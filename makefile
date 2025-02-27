@@ -14,7 +14,7 @@ build:
 	mkdir -p build
 
 assemble: src/lexer.cpp src/parser.cpp
-	g++ src/lexer.cpp src/parser.cpp src/Assembler.cpp  $(CFLAGS) -o build/asembler
+	g++ src/lexer.cpp src/parser.cpp src/Assembler.cpp  $(CFLAGS) -o build/assembler
 
 link: 
 	g++ src/Linker.cpp $(CFLAGS) -o build/linker

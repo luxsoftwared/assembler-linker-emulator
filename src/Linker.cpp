@@ -20,7 +20,7 @@ void Linker::link()
 	
 	for(const auto &filename : objectFilenames)
 	{
-		std::ifstream inBin(filename, std::ios::in | std::ios::binary);
+		std::ifstream inBin("./outputs/"+filename, std::ios::in | std::ios::binary);
 		ObjectFile obj(inBin);
 		objectFiles.push_back(obj);
 	}
@@ -63,7 +63,7 @@ void Linker::addSectionPlacementReq(const std::string &sectionName, uint32_t add
 void Linker::generateOutputFiles()
 {
 	std::cout<<"Generating output files...\n";
-	std::ofstream outTxt(("./outputs/"+outputFilename+".hex").c_str(), std::ios::out);
+	std::ofstream outTxt(("./outputs/"+outputFilename+"").c_str(), std::ios::out);
 	uint32_t displayedAddress = 0;
 	uint32_t i = 0;
 	for(auto& code: initCode){
@@ -273,6 +273,7 @@ bool Linker::placeSections()
 
 bool Linker::placeSectionAtAddr(const std::string &sectionName, uint32_t address)
 {
+	std::cerr<<"Placing section "<<sectionName<<" at address "<<std::hex<<address<<"\n";
 	globalSymbolTable[sectionName].value = address;
 	for(uint8_t byte: sections[sectionName].code){
 		if(address==MAX_ADDRES) return false;
@@ -286,11 +287,13 @@ bool Linker::placeSectionAtAddr(const std::string &sectionName, uint32_t address
 bool Linker::resolveRelocations()
 {
 	std::cout<<"Resolving relocations...\n";
+	std::cout<<" At addres\t| symbol name\t| value\n";
+
 	for(auto &section : sections )
 	{
 		for(auto &reloc : section.second.relocationTable)
 		{
-			if(reloc.type != RelocTableElem::RelocType::VALUE){
+			if(reloc.type != RelocTableElem::RelocType::VALUE){ //relativ will already be resolved
 				std::cerr<<"ERROR: relocation type different from VALUE (absolute), not implemented\n";
 				return false;
 			}
@@ -326,7 +329,7 @@ bool Linker::resolveRelocations()
 			
 			switch(reloc.type){
 				case RelocTableElem::RelocType::VALUE:
-					std::cout<<"Relocating VALUE\n";
+					std::cerr<<std::hex<<std::setw(10)<<relocAddress<<"|"<<std::setw(12)<<*reloc.symbolName<<"|"<<std::hex<<relocValue<<"\n";
 					initCode[relocAddress] = (relocValue & 0xFF);
 					initCode[relocAddress+1] = ((relocValue>>8) & 0xFF);
 					initCode[relocAddress+2] = ((relocValue>>16) & 0xFF);

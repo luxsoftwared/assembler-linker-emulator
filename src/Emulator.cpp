@@ -5,7 +5,8 @@
 
 Emulator::Emulator(char* filename) : programCounter(START_ADDRESS) {
 	// try to open the file
-	std::ifstream inTxt(filename, std::ios::in);
+	std::string filenameStr(filename);
+	std::ifstream inTxt("./outputs/"+filenameStr, std::ios::in);
 	if(!inTxt.is_open()){
 		std::cerr<<"ERROR: could not open file:"<<filename<<"\n";
 		return;
@@ -133,6 +134,7 @@ void Emulator::run() {
 		programCounter = registers[PC];
 		registers[PC]+=4;
 		running = executeInstruction(programCounter);
+		std::cout<<"Executed intruction at: "<<std::hex<<programCounter<<"\n";
 	}
 
 	printMemory(memory);
