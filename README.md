@@ -2,7 +2,7 @@
 
 ## Project Overview
 This project implements a toolchain for an abstract computing system, including an assembler, linker, and emulator. The tools allow for assembling and linking programs written in a custom assembly
-language and then executing them on an emulator simulating the target system. 
+language and then executing them on an emulator simulating the target system. Detailed description of the assignment and specification of the abstract system can be found in Serbian in `01-ss-2023-2024-projekat-postavka-v1.0.pdf`.
 
 ## Features
 - **Assembler**:
